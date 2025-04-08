@@ -1,3 +1,3 @@
 # Yapay Zeka Sesli Ve Yazılı Konuşma Botu
 
-Akşam saat 6da kodlar yüklenecektir
+Tüm kodlar yüklendi readme.md sonra yüklenecektir.
