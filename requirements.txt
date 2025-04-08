@@ -1,0 +1,13 @@
+PyQt6
+SQLAlchemy
+openai
+PyJWT
+python-dotenv
+pyttsx3
+SpeechRecognition
+PyOpenGL
+PyOpenGL-accelerate
+numpy
+bcrypt
+validators
+matplotlib
