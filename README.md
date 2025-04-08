@@ -1,3 +1,3 @@
 # Yapay Zeka Sesli Ve Yazılı Konuşma Botu
 
-***Eklenecek***
+Akşam saat 6da kodlar yüklenecektir
