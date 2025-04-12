@@ -1,0 +1,253 @@
+{
+    "app_name": "DinamikChat",
+    "version": "1.0.0",
+    "database": {
+        "name": "dinamik_chat.db",
+        "tables": {
+            "user": {
+                "columns": [
+                    "user_id",
+                    "username",
+                    "password",
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "is_admin",
+                    "is_verified",
+                    "created_at"
+                ]
+            },
+            "conversation": {
+                "columns": [
+                    "conversation_id",
+                    "user_id",
+                    "name",
+                    "created_at",
+                    "is_archived"
+                ]
+            },
+            "message": {
+                "columns": [
+                    "message_id",
+                    "conversation_id",
+                    "message_content",
+                    "response_message",
+                    "message_date"
+                ]
+            },
+            "settings": {
+                "columns": [
+                    "setting_id",
+                    "setting_name",
+                    "setting_sub"
+                ]
+            }
+        },
+        "backup": {
+            "enabled": true,
+            "interval_days": 7,
+            "max_backups": 5,
+            "path": "backups/"
+        },
+        "connection": {
+            "pool_size": 10,
+            "timeout": 30,
+            "retry_attempts": 3
+        }
+    },
+    "ui": {
+        "theme": {
+            "dark": {
+                "background": "#1e1e1e",
+                "secondary": "#252526",
+                "foreground": "#e0e0e0",
+                "accent": "#007acc",
+                "border": "#444444",
+                "hover": "#3e3e42",
+                "user_message": "#1E3A8A",
+                "ai_message": "#2A2A2A",
+                "input_frame": "#2A2A2A",
+                "input": "#363636",
+                "input_text": "#F0F0F0",
+                "input_border": "#555",
+                "button": "#00AAFF",
+                "button_hover": "#0088CC",
+                "name": "#E0E0E0",
+                "time": "#909090",
+                "content": "#F0F0F0",
+                "icon": "#FFFFFF",
+                "copy_button": "#909090",
+                "copy_button_hover": "#E0E0E0"
+            },
+            "light": {
+                "background": "#f5f5f5",
+                "secondary": "#e8e8e8",
+                "foreground": "#333333",
+                "accent": "#0078d4",
+                "border": "#cccccc",
+                "hover": "#d5d5d5",
+                "user_message": "#E6F2FF",
+                "ai_message": "#F0F0F0",
+                "input_frame": "#FFFFFF",
+                "input": "#F5F5F5",
+                "input_text": "#333333",
+                "input_border": "#CCCCCC",
+                "button": "#0078d4",
+                "button_hover": "#106EBE",
+                "name": "#333333",
+                "time": "#666666",
+                "content": "#333333",
+                "icon": "#333333",
+                "copy_button": "#999999",
+                "copy_button_hover": "#666666"
+            }
+        },
+        "modes": {
+            "normal": "Olağan bir sohbet asistanı gibi yanıt ver.",
+            "literary": "Edebi bir dil kullanarak, şiirsel ve metaforlarla zengin bir şekilde yanıt ver.",
+            "educational": "Eğitici bir yaklaşımla, adım adım açıklayarak ve örneklerle destekleyerek yanıt ver.",
+            "technical": "Teknik bir dil kullanarak, detaylı bilgiler ve teknik terimlerle açıklayarak yanıt ver.",
+            "conversational": "Samimi ve günlük konuşma dilinde, arkadaşça bir yaklaşımla yanıt ver."
+        },
+        "fonts": {
+            "default": "Segoe UI",
+            "size": {
+                "small": 12,
+                "medium": 14,
+                "large": 16
+            }
+        },
+        "animations": {
+            "enabled": true,
+            "speed": "normal",
+            "effects": {
+                "transitions": true,
+                "hologram": true,
+                "waves": true
+            }
+        },
+        "layout": {
+            "chatbubble_style": "modern",
+            "message_alignment": "right",
+            "show_timestamps": true,
+            "show_user_avatars": true
+        },
+        "email": {
+            "user": "dinamikchatt@gmail.com",
+            "password": "MAIL_PASSWORD",
+            "smtp_server": "smtp.gmail.com",
+            "smtp_port": 587,
+            "verification": {
+            "subject": "DinamikChat - E-posta Doğrulama",
+            "expiry_hours": 24,
+            "template": "email_templates/verification.html"
+        },
+        "password_reset": {
+            "subject": "DinamikChat - Şifre Sıfırlama",
+            "expiry_hours": 1,
+            "template": "email_templates/password_reset.html"
+        }
+    },
+    "security": {
+        "password_policy": {
+            "min_length": 8,
+            "max_length": 64,
+            "require_uppercase": true,
+            "require_lowercase": true,
+            "require_number": true,
+            "require_special": true,
+            "min_special_chars": 1,
+            "min_digits": 1,
+            "min_uppercase": 1,
+            "min_lowercase": 1,
+            "disallow_common_passwords": true,
+            "disallow_username_in_password": true,
+            "disallow_sequential_chars": true,
+            "max_repeated_chars": 3,
+            "password_history_count": 5,
+            "password_expiry_days": 90,
+            "custom_regex_pattern": "",
+            "password_strength_levels": {
+                "weak": 0,
+                "medium": 40,
+                "strong": 70,
+                "very_strong": 90
+            },
+            "blacklisted_words": ["password", "admin", "123456", "qwerty"],
+            "force_change_on_first_login": true,
+            "breach_detection": {
+                "enabled": true,
+                "api_endpoint": "https://api.haveibeenpwned.com/v3/breachedaccount/",
+                "frequency": "on_login"
+            },
+            "complexity_requirements": {
+                "min_character_classes": 3,
+                "entropy_bits_min": 40
+            },
+            "lockout_policy": {
+                "incorrect_attempts": 5,
+                "lockout_duration_minutes": 30,
+                "reset_counter_after_minutes": 60
+            }
+        },
+        "session": {
+            "timeout_minutes": 60,
+            "max_login_attempts": 5,
+            "lockout_duration_minutes": 15
+        },
+        "two_factor_auth": {
+            "enabled": false,
+            "method": "email"
+        }
+    },
+    "model": {
+        "default_path": "assets/models/head.obj",
+        "animation_fps": 30,
+        "additional_models": [
+            {
+                "name": "Robot",
+                "path": "assets/models/robot.obj"
+            },
+            {
+                "name": "Assistant",
+                "path": "assets/models/assistant.obj"
+            }
+        ],
+        "textures": {
+            "resolution": "high",
+            "path": "assets/textures/"
+        }
+    },
+    "notifications": {
+        "desktop": {
+            "enabled": true,
+            "sound": true,
+            "duration_seconds": 5
+        },
+        "in_app": {
+            "enabled": true,
+            "position": "top-right"
+        }
+    },
+    "language": {
+        "default": "tr",
+        "available": ["tr", "en"],
+        "auto_detect": false
+    },
+    "storage": {
+        "chat_history": {
+            "max_days": 30,
+            "auto_cleanup": true
+        },
+        "file_uploads": {
+            "allowed_types": ["jpg", "jpeg", "png", "pdf", "txt", "doc", "docx"],
+            "max_size_mb": 10,
+            "path": "uploads/"
+        }
+    },
+    "updates": {
+        "check_automatically": true,
+        "channel": "stable",
+        "auto_update": false
+    }
+} 

@@ -1,0 +1,111 @@
+@keyframes waveAnimation {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+    25% {
+        transform: rotate(1deg) scale(1.02);
+    }
+    50% {
+        transform: rotate(0deg) scale(1.05);
+    }
+    75% {
+        transform: rotate(-1deg) scale(1.02);
+    }
+    100% {
+        transform: rotate(0deg) scale(1);
+    }
+}
+
+@keyframes glowPulse {
+    0% {
+        opacity: 0.7;
+        box-shadow: 0 0 20px 5px rgba(0, 170, 255, 0.5);
+    }
+    50% {
+        opacity: 0.9;
+        box-shadow: 0 0 30px 8px rgba(0, 170, 255, 0.8);
+    }
+    100% {
+        opacity: 0.7;
+        box-shadow: 0 0 20px 5px rgba(0, 170, 255, 0.5);
+    }
+}
+
+@keyframes ringRotation {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.hologram-model {
+    animation: waveAnimation 8s infinite ease-in-out;
+    filter: drop-shadow(0 0 15px rgba(0, 170, 255, 0.8));
+}
+
+.hologram-container {
+    animation: glowPulse 5s infinite ease-in-out;
+    position: relative;
+}
+
+.hologram-ring {
+    position: absolute;
+    border: 2px solid rgba(0, 170, 255, 0.3);
+    border-radius: 50%;
+}
+
+.hologram-ring-1 {
+    width: 100%;
+    height: 30%;
+    top: 35%;
+    left: 0;
+    animation: ringRotation 15s infinite linear;
+}
+
+.hologram-ring-2 {
+    width: 100%;
+    height: 30%;
+    top: 35%;
+    left: 0;
+    transform: rotate(60deg);
+    animation: ringRotation 20s infinite linear reverse;
+}
+
+.hologram-ring-3 {
+    width: 100%;
+    height: 30%;
+    top: 35%;
+    left: 0;
+    transform: rotate(120deg);
+    animation: ringRotation 25s infinite linear;
+}
+
+@keyframes panelSlide {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.panel-appear {
+    animation: panelSlide 0.5s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+} 
