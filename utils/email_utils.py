@@ -34,16 +34,13 @@ class EmailManager:
         subject = self.email_settings['verification']['subject']
         expiry_hours = self.email_settings['verification']['expiry_hours']
         
-        # Doğrulama kodu oluştur
         code = self.generate_verification_code(recipient)
         verification_link = f"https://dinamikchat.com/verify?email={recipient}&code={code}"
         
-        # Şablon dosyasını oku
         if os.path.exists(template_path):
             with open(template_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
                 
-            # Şablonu doldur
             html_content = html_content.replace('{name}', name if name else recipient.split('@')[0])
             html_content = html_content.replace('{verification_code}', code)
             html_content = html_content.replace('{verification_link}', verification_link)
@@ -54,11 +51,9 @@ class EmailManager:
             message['To'] = recipient
             message['Subject'] = subject
             
-            # HTML içeriğini ekle
             html_part = MIMEText(html_content, 'html')
             message.attach(html_part)
             
-            # Metin alternatifi ekle
             text_content = f"""
             Merhaba {name if name else recipient.split('@')[0]},
             
@@ -74,7 +69,6 @@ class EmailManager:
             text_part = MIMEText(text_content, 'plain')
             message.attach(text_part)
         else:
-            # Şablon bulunamadıysa basit bir e-posta gönder
             message = MIMEMultipart()
             message['From'] = sender_email
             message['To'] = recipient
@@ -106,7 +100,6 @@ class EmailManager:
             except Exception as e:
                 print(f"E-posta gönderimi başarısız: {str(e)}")
                 
-        # Asenkron e-posta gönderimi
         email_thread = threading.Thread(target=send_email)
         email_thread.daemon = True
         email_thread.start()
@@ -118,16 +111,13 @@ class EmailManager:
         subject = self.email_settings['password_reset']['subject']
         expiry_hours = self.email_settings['password_reset']['expiry_hours']
         
-        # Sıfırlama kodu oluştur
         code = self.generate_verification_code(recipient)
         reset_link = f"https://dinamikchat.com/reset-password?email={recipient}&code={code}"
         
-        # Şablon dosyasını oku
         if os.path.exists(template_path):
             with open(template_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
                 
-            # Şablonu doldur
             html_content = html_content.replace('{name}', name if name else recipient.split('@')[0])
             html_content = html_content.replace('{reset_link}', reset_link)
             html_content = html_content.replace('{expiry_hours}', str(expiry_hours))
@@ -136,12 +126,10 @@ class EmailManager:
             message['From'] = sender_email
             message['To'] = recipient
             message['Subject'] = subject
-            
-            # HTML içeriğini ekle
+
             html_part = MIMEText(html_content, 'html')
             message.attach(html_part)
-            
-            # Metin alternatifi ekle
+
             text_content = f"""
             Merhaba {name if name else recipient.split('@')[0]},
             
@@ -157,7 +145,6 @@ class EmailManager:
             text_part = MIMEText(text_content, 'plain')
             message.attach(text_part)
         else:
-            # Şablon bulunamadıysa basit bir e-posta gönder
             message = MIMEMultipart()
             message['From'] = sender_email
             message['To'] = recipient

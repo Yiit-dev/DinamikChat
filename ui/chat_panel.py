@@ -1,5 +1,4 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-                            QLineEdit, QPushButton, QScrollArea, QLabel, QFrame, QSizePolicy)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit, QPushButton, QScrollArea, QLabel, QFrame, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QDateTime
 from PyQt6.QtGui import QIcon, QFont, QColor
 import speech_recognition as sr

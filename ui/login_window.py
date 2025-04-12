@@ -1,5 +1,4 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QLineEdit, QPushButton, QStackedWidget, QMessageBox, QFrame, QProgressBar)
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QStackedWidget, QMessageBox, QFrame, QProgressBar
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QRect, pyqtProperty
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QColor, QPainter, QRadialGradient, QBrush, QLinearGradient, QPainterPath
 import json
@@ -7,11 +6,14 @@ import os
 import math
 import random
 import time
-
+import sys
+import bcrypt
+import logging
 from database import User, get_db_session
 from utils.email_utils import email_manager
 from utils.animation_utils import AnimatableWidget
 import validators
+from database.models import UserManager, initialize_database
 
 class AnimatedLogo(AnimatableWidget):
     def __init__(self, parent=None):
@@ -42,9 +44,7 @@ class AnimatedLogo(AnimatableWidget):
         
         pulse = 1.0 + 0.05 * abs(math.sin(self._pulse_factor * math.pi))
         
-        # Hologram arka plan glow efekti
         if self._hologram_factor > 0.1:
-            # Çift katmanlı glow efekti
             outer_glow = QRadialGradient(center_x, center_y, self._logo_size * 1.5)
             outer_glow.setColorAt(0, QColor(0, 180, 255, int(20 * self._opacity * self._hologram_factor)))
             outer_glow.setColorAt(0.5, QColor(0, 120, 200, int(10 * self._opacity * self._hologram_factor)))
@@ -55,7 +55,6 @@ class AnimatedLogo(AnimatableWidget):
             painter.drawEllipse(int(center_x - self._logo_size * 1.5), int(center_y - self._logo_size * 1.5), 
                                int(self._logo_size * 3), int(self._logo_size * 3))
             
-            # İç parlama
             inner_glow = QRadialGradient(center_x, center_y, self._logo_size * 0.8)
             inner_glow.setColorAt(0, QColor(50, 200, 255, int(40 * self._opacity * self._hologram_factor)))
             inner_glow.setColorAt(1, QColor(0, 100, 200, 0))
@@ -64,38 +63,31 @@ class AnimatedLogo(AnimatableWidget):
             painter.drawEllipse(int(center_x - self._logo_size * 0.8), int(center_y - self._logo_size * 0.8), 
                                int(self._logo_size * 1.6), int(self._logo_size * 1.6))
             
-            # Holografik ızgara (grid) çizgileri
             if self._hologram_factor > 0.3:
                 grid_color = QColor(0, 200, 255, int(50 * self._opacity * self._hologram_factor))
                 painter.setPen(grid_color)
                 
-                # Yatay ve dikey ızgara çizgileri çiz
-                grid_size = 15  # Grid karelerinin boyutu
+                grid_size = 15
                 grid_area = int(self._logo_size * 1.2)
                 grid_start_x = int(center_x - grid_area / 2)
                 grid_start_y = int(center_y - grid_area / 2)
                 
-                # Izgara ofsetini animasyona göre ayarla
                 offset_x = int(self._grid_offset * 10) % grid_size
                 offset_y = int(self._grid_offset * 7) % grid_size
                 
-                # Yatay çizgiler
                 for y in range(grid_start_y + offset_y, grid_start_y + grid_area, grid_size):
                     line_opacity = 0.3 + 0.7 * abs(math.sin((y * 0.05 + self._hologram_shift) * math.pi))
                     painter.setPen(QColor(0, 200, 255, int(40 * self._opacity * line_opacity * self._hologram_factor)))
                     painter.drawLine(grid_start_x, y, grid_start_x + grid_area, y)
                 
-                # Dikey çizgiler
                 for x in range(grid_start_x + offset_x, grid_start_x + grid_area, grid_size):
                     line_opacity = 0.3 + 0.7 * abs(math.sin((x * 0.05 + self._hologram_shift) * math.pi))
                     painter.setPen(QColor(0, 200, 255, int(40 * self._opacity * line_opacity * self._hologram_factor)))
                     painter.drawLine(x, grid_start_y, x, grid_start_y + grid_area)
                 
-                # 3D izometrik efekti için çapraz çizgiler (perspektif hissi)
                 persp_color = QColor(50, 220, 255, int(30 * self._opacity * self._hologram_factor))
                 painter.setPen(persp_color)
                 
-                # Çapraz çizgiler - sol alt köşeden sağ üst köşeye
                 for i in range(-5, 6, 2):
                     start_x = grid_start_x
                     start_y = grid_start_y + grid_area // 2 + i * (grid_area // 10)
@@ -103,7 +95,6 @@ class AnimatedLogo(AnimatableWidget):
                     end_y = grid_start_y + grid_area // 2 - i * (grid_area // 10)
                     painter.drawLine(start_x, start_y, end_x, end_y)
         
-        # Ana gradient
         gradient = QRadialGradient(center_x, center_y, self._logo_size / 1.5)
         gradient.setColorAt(0, QColor(0, 170, 255, int(200 * self._opacity)))
         gradient.setColorAt(0.5, QColor(0, 100, 200, int(150 * self._opacity)))
@@ -112,19 +103,16 @@ class AnimatedLogo(AnimatableWidget):
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
         
-        # Ana daire
         size = int(self._logo_size * pulse * (0.9 + 0.1 * self.glow_intensity))
         rect = QRect(int(center_x - size/2), int(center_y - size/2), size, size)
         painter.drawEllipse(rect)
         
-        # İç parlak halka
         inner_size = int(size * 0.8)
         glow_intensity = 0.5 + 0.5 * self.glow_intensity
         inner_rect = QRect(int(center_x - inner_size/2), int(center_y - inner_size/2), inner_size, inner_size)
         painter.setPen(QColor(255, 255, 255, int(100 * self._opacity * glow_intensity)))
         painter.drawEllipse(inner_rect)
         
-        # Dönen dış halkalar
         rotation_speeds = [1.0, 1.5, 0.7]
         ring_colors = [
             QColor(0, 200, 255, int(70 * self._opacity * (0.8 + 0.2 * self.glow_intensity))),
@@ -148,7 +136,6 @@ class AnimatedLogo(AnimatableWidget):
             painter.drawEllipse(ring_rect)
             painter.restore()
         
-        # Merkezdeki parlak daire
         center_glow = QRadialGradient(center_x, center_y, size/5)
         glow_color = QColor(50, 170, 255, int(100 * self._opacity * glow_intensity))
         center_glow.setColorAt(0, glow_color)
@@ -158,41 +145,32 @@ class AnimatedLogo(AnimatableWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRect(int(center_x - size/4), int(center_y - size/4), int(size/2), int(size/2)))
         
-        # Logo merkezi "D" harfi
         painter.setFont(QFont("Arial", int(size/2.5), QFont.Weight.Bold))
         
-        # Gölge efekti için hafif kaydırılmış koyu yazı
         shadow_color = QColor(0, 50, 120, int(150 * self._opacity))
         painter.setPen(shadow_color)
         shadow_rect = QRect(int(center_x - size/2) + 2, int(center_y - size/2) + 2, size, size)
         painter.drawText(shadow_rect, Qt.AlignmentFlag.AlignCenter, "D")
         
-        # Ana "D" yazısı
         text_color = QColor(255, 255, 255, int(255 * self._opacity))
         
-        # Hologramdaki renk sapması
         if self._hologram_factor > 0.3:
             red_offset = self._hologram_factor * 3.0
             
-            # Kırmızı katman hafif kaydırılmış
             red_rect = QRect(int(center_x - size/2 - red_offset), 
                             int(center_y - size/2), size, size)
             painter.setPen(QColor(255, 50, 50, int(180 * self._opacity * self._hologram_factor)))
             painter.drawText(red_rect, Qt.AlignmentFlag.AlignCenter, "D")
             
-            # Mavi katman hafif kaydırılmış
             blue_rect = QRect(int(center_x - size/2 + red_offset), 
                             int(center_y - size/2), size, size)
             painter.setPen(QColor(50, 50, 255, int(180 * self._opacity * self._hologram_factor)))
             painter.drawText(blue_rect, Qt.AlignmentFlag.AlignCenter, "D")
         
-        # Ana yazı
         painter.setPen(text_color)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "D")
         
-        # Holografik pikselleşme efekti
         if self._hologram_factor > 0.5:
-            # Rastgele piksel bloklarını çiz
             pixel_size = 3
             pixel_count = 40
             pixel_max_distance = size * 0.7
@@ -273,7 +251,6 @@ class AnimatedLogo(AnimatableWidget):
         self.hologram_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.hologram_anim.start()
         
-        # Hologram shift animasyonu
         self.hologram_shift_anim = QPropertyAnimation(self, b"hologramShift")
         self.hologram_shift_anim.setDuration(3000)
         self.hologram_shift_anim.setStartValue(0.0)
@@ -436,827 +413,402 @@ class LoginWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("DinamikChat - Giriş")
+        self.setMinimumSize(800, 600)
+        self.setWindowIcon(QIcon("assets/icons/app_icon.png"))
         
-        with open('settings.json', 'r', encoding='utf-8') as f:
-            self.settings = json.load(f)
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
         
-        # Varsayılan olarak koyu tema
-        self.current_theme_name = 'dark'
-        self.theme = self.settings['ui']['theme']['dark']
-        self.app_name = self.settings['app_name']
+        layout = QHBoxLayout(main_widget)
         
-        self.setWindowTitle(self.app_name)
-        self.setMinimumSize(900, 600)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(50, 50, 50, 50)
+        left_layout.setSpacing(20)
         
-        self.setWindowIcon(QIcon("assets/icons/app_icon.svg"))
+        logo_label = QLabel()
+        pixmap = QPixmap("assets/images/app_logo.png")
+        logo_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo_label.setAlignment(Qt.AlignCenter)
         
-        self.init_ui()
-    
-    def init_ui(self):
-        central_widget = QWidget()
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        app_name = QLabel("DinamikChat")
+        app_name.setFont(QFont("Arial", 24, QFont.Bold))
+        app_name.setAlignment(Qt.AlignCenter)
         
-        # Animasyonlu logo widget'ı
-        self.logo_widget = AnimatedLogo()
-        self.logo_widget.setFixedHeight(200)
+        app_desc = QLabel("Yapay zeka destekli gelişmiş sohbet uygulaması")
+        app_desc.setFont(QFont("Arial", 12))
+        app_desc.setWordWrap(True)
+        app_desc.setAlignment(Qt.AlignCenter)
         
-        login_panel = QWidget()
-        login_panel.setObjectName("loginPanel")
-        login_layout = QVBoxLayout(login_panel)
-        login_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(logo_label)
+        left_layout.addWidget(app_name)
+        left_layout.addWidget(app_desc)
+        left_layout.addStretch()
         
-        self.stacked_widget = QStackedWidget()
-        
-        # Stacked widget index değişince logoyu göster/gizle
-        def update_logo_visibility(index):
-            if index == 0:  # Sadece giriş ekranında logo göster
-                self.logo_widget.setVisible(True)
-            else:  # Diğer ekranlarda logoyu gizle
-                self.logo_widget.setVisible(False)
-        
-        self.stacked_widget.currentChanged.connect(update_logo_visibility)
-        
-        login_widget = QWidget()
-        login_widget_layout = QVBoxLayout(login_widget)
-        login_widget_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_panel = QWidget()
+        right_panel.setObjectName("loginPanel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(50, 50, 50, 50)
+        right_layout.setSpacing(20)
         
         login_title = QLabel("Giriş Yap")
-        login_title.setFont(QFont("Arial", 20))
-        login_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        login_title.setFont(QFont("Arial", 20, QFont.Bold))
+        login_title.setAlignment(Qt.AlignCenter)
         
-        form_frame = QFrame()
-        form_frame.setObjectName("formFrame")
-        form_layout = QVBoxLayout(form_frame)
+        username_label = QLabel("Kullanıcı Adı:")
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Kullanıcı adınızı girin")
+        self.username_input.setMinimumHeight(40)
         
-        self.login_username = QLineEdit()
-        self.login_username.setPlaceholderText("Kullanıcı Adı veya E-posta")
-        self.login_username.setMinimumHeight(40)
+        password_label = QLabel("Şifre:")
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("Şifrenizi girin")
+        self.password_input.setMinimumHeight(40)
         
-        # Şifre gösterme/gizleme düğmesi için yeni bir stil tanımı
-        self.password_toggle_style = """
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                color: %s;
-            }
-            QPushButton:hover {
-                color: %s;
-            }
-        """ % (self.theme['foreground'], self.theme['accent'])
-        
-        # Şifre güvenliği göstergesi için stil
-        self.password_strength_style = """
-            QProgressBar {
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: %s;
-                width: 10px;
-                margin: 0px;
-            }
-        """
-        
-        # Login password ve show/hide button için bir container
-        password_container = QWidget()
-        password_layout = QHBoxLayout(password_container)
-        password_layout.setContentsMargins(0, 0, 0, 0)
-        password_layout.setSpacing(0)
-        
-        self.login_password = QLineEdit()
-        self.login_password.setPlaceholderText("Parola")
-        self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.login_password.setMinimumHeight(40)
-        
-        # Show/hide password button
-        self.login_password_toggle = QPushButton()
-        self.login_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
-        self.login_password_toggle.setFixedSize(40, 40)
-        self.login_password_toggle.setStyleSheet(self.password_toggle_style)
-        self.login_password_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.login_password_toggle.clicked.connect(self.toggle_login_password_visibility)
-        
-        password_layout.addWidget(self.login_password)
-        password_layout.addWidget(self.login_password_toggle)
+        self.remember_checkbox = QCheckBox("Beni Hatırla")
         
         login_button = QPushButton("Giriş Yap")
-        login_button.setMinimumHeight(40)
-        login_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        login_button.clicked.connect(self.handle_login)
+        login_button.setMinimumHeight(50)
+        login_button.setObjectName("primaryButton")
+        login_button.clicked.connect(self.login)
         
-        forgot_password_button = QPushButton("Şifremi Unuttum")
-        forgot_password_button.setObjectName("linkButton")
-        forgot_password_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        forgot_password_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(2))
-        
-        register_button = QPushButton("Hesabınız yok mu? Kaydolun")
-        register_button.setObjectName("linkButton")
-        register_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        register_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
-        
-        form_layout.addWidget(self.login_username)
-        form_layout.addWidget(password_container)
-        form_layout.addWidget(login_button)
-        form_layout.addWidget(forgot_password_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        form_layout.addWidget(register_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        login_widget_layout.addWidget(login_title)
-        login_widget_layout.addWidget(form_frame)
-        
-        register_widget = QWidget()
-        register_layout = QVBoxLayout(register_widget)
-        register_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        register_title = QLabel("Kayıt Ol")
-        register_title.setFont(QFont("Arial", 20))
-        register_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        register_form_frame = QFrame()
-        register_form_frame.setObjectName("formFrame")
-        register_form_layout = QVBoxLayout(register_form_frame)
-        register_form_layout.setSpacing(12)  # Alanlar arası mesafeyi artır
-        
-        self.register_username = QLineEdit()
-        self.register_username.setPlaceholderText("Kullanıcı Adı")
-        self.register_username.setMinimumHeight(40)
-        
-        self.register_email = QLineEdit()
-        self.register_email.setPlaceholderText("E-posta")
-        self.register_email.setMinimumHeight(40)
-        
-        # Register password ve show/hide button için bir container
-        register_password_container = QWidget()
-        register_password_layout = QHBoxLayout(register_password_container)
-        register_password_layout.setContentsMargins(0, 0, 0, 0)
-        register_password_layout.setSpacing(0)
-        
-        self.register_password = QLineEdit()
-        self.register_password.setPlaceholderText("Parola")
-        self.register_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.register_password.setMinimumHeight(40)
-        self.register_password.textChanged.connect(self.check_password_strength)
-        
-        # Show/hide password button
-        self.register_password_toggle = QPushButton()
-        self.register_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
-        self.register_password_toggle.setFixedSize(40, 40)
-        self.register_password_toggle.setStyleSheet(self.password_toggle_style)
-        self.register_password_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.register_password_toggle.clicked.connect(self.toggle_register_password_visibility)
-        
-        register_password_layout.addWidget(self.register_password)
-        register_password_layout.addWidget(self.register_password_toggle)
-        
-        # Password strength indicator
-        self.password_strength_bar = QProgressBar()
-        self.password_strength_bar.setRange(0, 100)
-        self.password_strength_bar.setValue(0)
-        self.password_strength_bar.setFixedHeight(5)
-        self.password_strength_bar.setTextVisible(False)
-        self.password_strength_label = QLabel("Şifre Gücü: Zayıf")
-        self.password_strength_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Password requirements
-        self.password_requirements = QLabel("Şifre en az 8 karakter olmalı ve büyük harf, küçük harf, rakam ve özel karakter içermelidir.")
-        self.password_requirements.setWordWrap(True)
-        self.password_requirements.setStyleSheet("color: #888; font-size: 11px;")
-        self.password_requirements.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        
-        self.register_first_name = QLineEdit()
-        self.register_first_name.setPlaceholderText("Ad")
-        self.register_first_name.setMinimumHeight(40)
-        
-        self.register_last_name = QLineEdit()
-        self.register_last_name.setPlaceholderText("Soyad")
-        self.register_last_name.setMinimumHeight(40)
-        
+        register_layout = QHBoxLayout()
+        register_text = QLabel("Hesabınız yok mu?")
         register_button = QPushButton("Kayıt Ol")
-        register_button.setMinimumHeight(40)
-        register_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        register_button.clicked.connect(self.handle_register)
+        register_button.setObjectName("linkButton")
+        register_button.clicked.connect(self.show_register_form)
         
-        back_to_login_button = QPushButton("Zaten hesabınız var mı? Giriş Yapın")
-        back_to_login_button.setObjectName("linkButton")
-        back_to_login_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_to_login_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        register_layout.addWidget(register_text)
+        register_layout.addWidget(register_button)
+        register_layout.setAlignment(Qt.AlignCenter)
         
-        register_form_layout.addWidget(self.register_username)
-        register_form_layout.addWidget(self.register_email)
-        register_form_layout.addWidget(register_password_container)
-        register_form_layout.addWidget(self.password_strength_bar)
-        register_form_layout.addWidget(self.password_strength_label)
-        register_form_layout.addWidget(self.password_requirements)
-        register_form_layout.addWidget(self.register_first_name)
-        register_form_layout.addWidget(self.register_last_name)
-        register_form_layout.addSpacing(10)  # Buton öncesi ek boşluk
-        register_form_layout.addWidget(register_button)
-        register_form_layout.addSpacing(5)  # Link buton öncesi ek boşluk
-        register_form_layout.addWidget(back_to_login_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        right_layout.addWidget(login_title)
+        right_layout.addSpacing(20)
+        right_layout.addWidget(username_label)
+        right_layout.addWidget(self.username_input)
+        right_layout.addSpacing(10)
+        right_layout.addWidget(password_label)
+        right_layout.addWidget(self.password_input)
+        right_layout.addSpacing(10)
+        right_layout.addWidget(self.remember_checkbox)
+        right_layout.addSpacing(20)
+        right_layout.addWidget(login_button)
+        right_layout.addSpacing(10)
+        right_layout.addLayout(register_layout)
+        right_layout.addStretch()
         
-        register_layout.addWidget(register_title)
-        register_layout.addWidget(register_form_frame)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
         
-        self.stacked_widget.addWidget(login_widget)
-        self.stacked_widget.addWidget(register_widget)
+        layout.addWidget(left_panel, 1)
+        layout.addWidget(separator)
+        layout.addWidget(right_panel, 1)
         
-        login_layout.addWidget(self.logo_widget)
-        login_layout.addWidget(self.stacked_widget)
+        self.setup_styles()
         
-        # Tema değiştirme düğmesi ekle
-        theme_button_layout = QHBoxLayout()
-        theme_button_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.user_manager = UserManager()
         
-        self.theme_button = QPushButton()
-        self.theme_button.setObjectName("themeButton")
-        self.theme_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_button.setFixedSize(40, 40)
-        self.theme_button.clicked.connect(self.toggle_theme)
-        
-        # Tema düğmesi ikonunu ayarla
-        self.update_theme_button_icon()
-        
-        theme_button_layout.addWidget(self.theme_button)
-        login_layout.insertLayout(0, theme_button_layout)
-        
-        main_layout.addWidget(login_panel)
-        
-        # Şifremi unuttum ekranını da ekleyelim
-        forgot_password_widget = QWidget()
-        forgot_password_layout = QVBoxLayout(forgot_password_widget)
-        forgot_password_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        forgot_password_title = QLabel("Şifremi Unuttum")
-        forgot_password_title.setFont(QFont("Arial", 20))
-        forgot_password_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        forgot_password_frame = QFrame()
-        forgot_password_frame.setObjectName("formFrame")
-        forgot_password_form_layout = QVBoxLayout(forgot_password_frame)
-        
-        self.forgot_email = QLineEdit()
-        self.forgot_email.setPlaceholderText("E-posta")
-        self.forgot_email.setMinimumHeight(40)
-        
-        send_code_button = QPushButton("Doğrulama Kodu Gönder")
-        send_code_button.setMinimumHeight(40)
-        send_code_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        send_code_button.clicked.connect(self.send_reset_code)
-        
-        self.verification_code = QLineEdit()
-        self.verification_code.setPlaceholderText("Doğrulama Kodu")
-        self.verification_code.setMinimumHeight(40)
-        self.verification_code.setVisible(False)
-        
-        self.new_password = QLineEdit()
-        self.new_password.setPlaceholderText("Yeni Parola")
-        self.new_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.new_password.setMinimumHeight(40)
-        self.new_password.setVisible(False)
-        
-        self.confirm_password = QLineEdit()
-        self.confirm_password.setPlaceholderText("Parolayı Doğrula")
-        self.confirm_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.confirm_password.setMinimumHeight(40)
-        self.confirm_password.setVisible(False)
-        
-        reset_password_button = QPushButton("Şifreyi Sıfırla")
-        reset_password_button.setMinimumHeight(40)
-        reset_password_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        reset_password_button.clicked.connect(self.reset_password)
-        reset_password_button.setVisible(False)
-        
-        self.reset_password_button = reset_password_button
-        
-        back_from_forgot_button = QPushButton("Giriş sayfasına dön")
-        back_from_forgot_button.setObjectName("linkButton")
-        back_from_forgot_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_from_forgot_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
-        
-        forgot_password_form_layout.addWidget(self.forgot_email)
-        forgot_password_form_layout.addWidget(send_code_button)
-        forgot_password_form_layout.addWidget(self.verification_code)
-        forgot_password_form_layout.addWidget(self.new_password)
-        forgot_password_form_layout.addWidget(self.confirm_password)
-        forgot_password_form_layout.addWidget(reset_password_button)
-        forgot_password_form_layout.addWidget(back_from_forgot_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        forgot_password_layout.addWidget(forgot_password_title)
-        forgot_password_layout.addWidget(forgot_password_frame)
-        
-        # Şifremi unuttum ekranını ekle
-        self.stacked_widget.addWidget(forgot_password_widget)
-        
-        # Doğrulama ekranını da ekle
-        verification_widget = QWidget()
-        verification_layout = QVBoxLayout(verification_widget)
-        verification_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        verification_title = QLabel("E-posta Doğrulama")
-        verification_title.setFont(QFont("Arial", 20))
-        verification_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        verification_frame = QFrame()
-        verification_frame.setObjectName("formFrame")
-        verification_form_layout = QVBoxLayout(verification_frame)
-        verification_form_layout.setSpacing(12)
-        
-        verification_description = QLabel("E-posta adresinize gönderilen 6 haneli doğrulama kodunu girin.")
-        verification_description.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        verification_description.setWordWrap(True)
-        
-        self.verification_code_register = QLineEdit()
-        self.verification_code_register.setPlaceholderText("Doğrulama Kodu")
-        self.verification_code_register.setMinimumHeight(40)
-        
-        verify_button = QPushButton("Doğrula")
-        verify_button.setMinimumHeight(40)
-        verify_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        verify_button.clicked.connect(self.verify_account)
-        
-        # Kodu tekrar gönderme düğmesi
-        resend_code_button = QPushButton("Kodu Tekrar Gönder")
-        resend_code_button.setObjectName("linkButton")
-        resend_code_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        resend_code_button.clicked.connect(self.resend_verification_code)
-        
-        back_button = QPushButton("Giriş Ekranına Dön")
-        back_button.setObjectName("linkButton")
-        back_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
-        
-        verification_form_layout.addWidget(verification_description)
-        verification_form_layout.addWidget(self.verification_code_register)
-        verification_form_layout.addWidget(verify_button)
-        verification_form_layout.addWidget(resend_code_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        verification_form_layout.addWidget(back_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        verification_layout.addWidget(verification_title)
-        verification_layout.addWidget(verification_frame)
-        
-        self.stacked_widget.addWidget(verification_widget)
-        
-        self.wave_animation = WaveAnimation()
-        main_layout.addWidget(self.wave_animation, alignment=Qt.AlignmentFlag.AlignBottom)
-        
-        self.setCentralWidget(central_widget)
-        
-        self.apply_styles()
-        
-        QTimer.singleShot(300, self.start_intro_animation)
-    
-    def start_intro_animation(self):
-        # Form alanı için aşağıdan yukarı kayma animasyonu
-        animation = QPropertyAnimation(self.stacked_widget, b"geometry")
-        animation.setDuration(800)
-        
-        current_geometry = self.stacked_widget.geometry()
-        start_geometry = QRect(
-            current_geometry.x(),
-            current_geometry.y() + 100,  # 100px aşağıdan başla
-            current_geometry.width(),
-            current_geometry.height()
-        )
-        
-        animation.setStartValue(start_geometry)
-        animation.setEndValue(current_geometry)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.start()
-    
-    def toggle_theme(self):
-        # Temayı değiştir
-        if self.current_theme_name == 'dark':
-            self.current_theme_name = 'light'
-            self.theme = self.settings['ui']['theme']['light']
-        else:
-            self.current_theme_name = 'dark'
-            self.theme = self.settings['ui']['theme']['dark']
-        
-        # Tema düğmesi ikonunu güncelle
-        self.update_theme_button_icon()
-        
-        # Stilleri tekrar uygula
-        self.apply_styles()
-    
-    def update_theme_button_icon(self):
-        # Tema düğmesi ikonunu ayarla
-        if self.current_theme_name == 'dark':
-            self.theme_button.setToolTip("Açık Tema")
-            # Burada güneş ikonu kullanabilirsiniz (eğer assets klasöründe varsa)
-            self.theme_button.setText("☀️")
-        else:
-            self.theme_button.setToolTip("Koyu Tema")
-            # Burada ay ikonu kullanabilirsiniz (eğer assets klasöründe varsa)
-            self.theme_button.setText("🌙")
-    
-    def apply_styles(self):
-        self.setStyleSheet(f"""
-            QMainWindow, QWidget {{
-                background-color: {self.theme['background']};
-                color: {self.theme['foreground']};
-                font-family: 'Segoe UI', Arial;
-            }}
-            
-            #loginPanel {{
-                background-color: {self.theme['background']};
-                padding: 20px;
-            }}
-            
-            #formFrame {{
-                background-color: {self.theme['secondary']};
-                border-radius: 10px;
-                padding: 20px;
-                max-width: 400px;
-            }}
-            
-            QLineEdit {{
-                background-color: {self.theme['background']};
-                border: 1px solid {self.theme['border']};
-                border-radius: 5px;
-                padding: 5px 10px;
-                color: {self.theme['foreground']};
-            }}
-            
-            QLineEdit:focus {{
-                border: 1px solid {self.theme['accent']};
-            }}
-            
-            QPushButton {{
-                background-color: {self.theme['accent']};
+        self.registerForm = None
+
+    def setup_styles(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QLabel {
+                color: #333333;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                background-color: #ffffff;
+            }
+            QPushButton#primaryButton {
+                background-color: #4a86e8;
                 color: white;
                 border: none;
-                border-radius: 5px;
-                padding: 5px 10px;
+                border-radius: 4px;
                 font-weight: bold;
-            }}
-            
-            QPushButton:hover {{
-                background-color: #0088cc;
-            }}
-            
-            #linkButton {{
+            }
+            QPushButton#primaryButton:hover {
+                background-color: #3a76d8;
+            }
+            QPushButton#linkButton {
                 background-color: transparent;
-                color: {self.theme['accent']};
+                color: #4a86e8;
                 border: none;
                 text-decoration: underline;
-                font-weight: normal;
-            }}
-            
-            #linkButton:hover {{
-                color: #0088cc;
-                background-color: transparent;
-            }}
-            
-            #themeButton {{
-                background-color: {self.theme['secondary']};
-                color: {self.theme['foreground']};
-                border-radius: 20px;
-                font-size: 18px;
-            }}
-            
-            #themeButton:hover {{
-                background-color: {self.theme['hover']};
-            }}
+                font-weight: bold;
+            }
+            QWidget#loginPanel {
+                background-color: white;
+                border-radius: 8px;
+            }
         """)
-    
-    def handle_login(self):
-        username_or_email = self.login_username.text().strip()
-        password = self.login_password.text()
+
+    def login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
         
-        if not username_or_email or not password:
-            QMessageBox.warning(self, "Hata", "Kullanıcı adı/e-posta ve parola gereklidir.")
+        if not username or not password:
+            QMessageBox.warning(self, "Hata", "Kullanıcı adı ve şifre boş olamaz.")
             return
-        
-        session = get_db_session()
         
         try:
-            # Kullanıcı adı veya e-posta ile kullanıcıyı bul
-            user = session.query(User).filter(
-                (User.username == username_or_email) | (User.email == username_or_email)
-            ).first()
+            user = self.user_manager.get_user_by_username(username)
             
-            if not user:
-                QMessageBox.warning(self, "Hata", "Kullanıcı adı veya parola yanlış.")
-                return
-            
-            if not user.verify_password(password):
-                QMessageBox.warning(self, "Hata", "Kullanıcı adı veya parola yanlış.")
-                return
-            
-            if not user.is_verified:
-                QMessageBox.warning(self, "Doğrulama Gerekli", "Hesabınızı kullanmadan önce e-posta adresinizi doğrulamanız gerekiyor.")
-                # Doğrulama kodu gönder
-                code = email_manager.generate_verification_code(user.email)
-                email_manager.send_verification_email(user.email, code)
-                self.pending_verification_user = user
-                self.stacked_widget.setCurrentIndex(3)  # Doğrulama formuna geç
-                return
-            
-            # Giriş başarılı
-            self.login_successful.emit(user)
-            
-            # Ana pencereye geç
-            from ui.main_window import MainWindow
-            self.main_window = MainWindow(user)
-            self.main_window.show()
-            self.hide()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Giriş sırasında bir hata oluştu: {str(e)}")
-        finally:
-            session.close()
-    
-    def handle_register(self):
-        username = self.register_username.text().strip()
-        email = self.register_email.text().strip()
-        password = self.register_password.text()
-        first_name = self.register_first_name.text().strip()
-        last_name = self.register_last_name.text().strip()
-        
-        # Validasyonlar
-        if not username or not email or not password or not first_name or not last_name:
-            QMessageBox.warning(self, "Hata", "Tüm alanlar zorunludur.")
-            return
-        
-        if len(password) < 8:
-            QMessageBox.warning(self, "Hata", "Parola en az 8 karakter olmalıdır.")
-            return
-        
-        if not validators.email(email):
-            QMessageBox.warning(self, "Hata", "Geçerli bir e-posta adresi girin.")
-            return
-        
-        session = get_db_session()
-        
-        try:
-            # Kullanıcı adı veya e-posta zaten var mı kontrol et
-            existing_user = session.query(User).filter(
-                (User.username == username) | (User.email == email)
-            ).first()
-            
-            if existing_user:
-                if existing_user.username == username:
-                    QMessageBox.warning(self, "Hata", "Bu kullanıcı adı zaten kullanılıyor.")
-                else:
-                    QMessageBox.warning(self, "Hata", "Bu e-posta adresi zaten kullanılıyor.")
-                return
-            
-            # Yeni kullanıcı oluştur
-            new_user = User(
-                user_id=User.generate_user_id(),
-                username=username,
-                password=User.hash_password(password),
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                is_admin=False,
-                is_verified=False
-            )
-            
-            session.add(new_user)
-            session.commit()
-            
-            # Doğrulama kodu gönder
-            code = email_manager.generate_verification_code(email)
-            email_manager.send_verification_email(email, code)
-            
-            # Doğrulama için gerekli verileri sakla
-            self.pending_verification_user = new_user
-            
-            # Doğrulama formuna geç
-            self.stacked_widget.setCurrentIndex(3)
-            
-        except Exception as e:
-            session.rollback()
-            QMessageBox.critical(self, "Hata", f"Kayıt sırasında bir hata oluştu: {str(e)}")
-        finally:
-            session.close()
-    
-    def verify_account(self):
-        code = self.verification_code_register.text().strip()
-        
-        if not hasattr(self, 'pending_verification_user') or not self.pending_verification_user:
-            QMessageBox.warning(self, "Hata", "Doğrulama yapılacak bir kullanıcı bulunamadı.")
-            self.stacked_widget.setCurrentIndex(0)
-            return
-        
-        if not code:
-            QMessageBox.warning(self, "Doğrulama Hatası", "Lütfen doğrulama kodunu girin.")
-            return
-        
-        # Email doğrulama kodunu kontrol et
-        user_email = self.pending_verification_user.get("email") if isinstance(self.pending_verification_user, dict) else self.pending_verification_user.email
-        
-        if email_manager.verify_code(user_email, code):
-            session = get_db_session()
-            try:
-                user = session.query(User).filter(User.user_id == self.pending_verification_user.user_id).first()
-                
-                if user and user.verification_code == code:
-                    user.is_verified = True
-                    user.verification_code = None
-                    session.commit()
-                    
-                    QMessageBox.information(self, "Başarılı", "Hesabınız başarıyla doğrulandı. Şimdi giriş yapabilirsiniz.")
-                    self.stacked_widget.setCurrentIndex(0)
-                    self.login_username.setText(user.username)
-                    self.login_password.setText("")
-                    self.login_password.setFocus()
-                else:
-                    QMessageBox.warning(self, "Doğrulama Hatası", "Doğrulama kodu hatalı.")
-            except Exception as e:
-                session.rollback()
-                QMessageBox.critical(self, "Hata", f"Doğrulama sırasında bir hata oluştu: {str(e)}")
-            finally:
-                session.close()
-    
-    def send_reset_code(self):
-        email = self.forgot_email.text().strip()
-        
-        if not email:
-            QMessageBox.warning(self, "Hata", "E-posta adresi gereklidir.")
-            return
-        
-        if not validators.email(email):
-            QMessageBox.warning(self, "Hata", "Geçerli bir e-posta adresi girin.")
-            return
-        
-        session = get_db_session()
-        
-        try:
-            user = session.query(User).filter_by(email=email).first()
-            
-            if not user:
-                # Güvenlik nedeniyle kullanıcı bulunamasa bile aynı mesajı göster
-                QMessageBox.information(self, "Bilgi", "Eğer bu e-posta sistemimizde kayıtlıysa, bir şifre sıfırlama kodu gönderilecektir.")
-                return
-            
-            # Doğrulama kodu gönder
-            code = email_manager.generate_verification_code(email)
-            email_manager.send_reset_password_email(email, code)
-            
-            # Diğer alanları görünür yap
-            self.verification_code.setVisible(True)
-            self.new_password.setVisible(True)
-            self.confirm_password.setVisible(True)
-            self.reset_password_button.setVisible(True)
-            
-            QMessageBox.information(self, "Bilgi", "Şifre sıfırlama kodu e-posta adresinize gönderildi.")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Kod gönderimi sırasında bir hata oluştu: {str(e)}")
-        finally:
-            session.close()
-    
-    def reset_password(self):
-        email = self.forgot_email.text().strip()
-        code = self.verification_code.text().strip()
-        new_password = self.new_password.text()
-        confirm_password = self.confirm_password.text()
-        
-        if not email or not code or not new_password or not confirm_password:
-            QMessageBox.warning(self, "Hata", "Tüm alanlar zorunludur.")
-            return
-        
-        if new_password != confirm_password:
-            QMessageBox.warning(self, "Hata", "Parolalar eşleşmiyor.")
-            return
-        
-        if len(new_password) < 8:
-            QMessageBox.warning(self, "Hata", "Parola en az 8 karakter olmalıdır.")
-            return
-        
-        if not email_manager.verify_code(email, code):
-            QMessageBox.warning(self, "Hata", "Doğrulama kodu geçersiz veya süresi dolmuş.")
-            return
-        
-        session = get_db_session()
-        
-        try:
-            user = session.query(User).filter_by(email=email).first()
-            
-            if not user:
+            if user is None:
                 QMessageBox.warning(self, "Hata", "Kullanıcı bulunamadı.")
                 return
+                
+            encoded_password = password.encode('utf-8')
+            hashed_password = user.password_hash.encode('utf-8')
             
-            user.password = User.hash_password(new_password)
-            session.commit()
-            
-            QMessageBox.information(self, "Başarılı", "Parolanız başarıyla sıfırlandı. Şimdi giriş yapabilirsiniz.")
-            
-            # Görünürlüğü sıfırla
-            self.verification_code.setVisible(False)
-            self.new_password.setVisible(False)
-            self.confirm_password.setVisible(False)
-            self.reset_password_button.setVisible(False)
-            
-            # Formu temizle
-            self.forgot_email.clear()
-            self.verification_code.clear()
-            self.new_password.clear()
-            self.confirm_password.clear()
-            
-            # Giriş ekranına dön
-            self.stacked_widget.setCurrentIndex(0)
-            
+            if bcrypt.checkpw(encoded_password, hashed_password):
+                self.successful_login(user)
+            else:
+                QMessageBox.warning(self, "Hata", "Şifre yanlış.")
+        
         except Exception as e:
-            session.rollback()
-            QMessageBox.critical(self, "Hata", f"Şifre sıfırlama sırasında bir hata oluştu: {str(e)}")
-        finally:
-            session.close()
-    
-    def toggle_login_password_visibility(self):
-        if self.login_password.echoMode() == QLineEdit.EchoMode.Password:
-            self.login_password.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.login_password_toggle.setIcon(QIcon("assets/icons/eye.svg"))
-        else:
-            self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
-            self.login_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
-    
-    def toggle_register_password_visibility(self):
-        if self.register_password.echoMode() == QLineEdit.EchoMode.Password:
-            self.register_password.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.register_password_toggle.setIcon(QIcon("assets/icons/eye.svg"))
-        else:
-            self.register_password.setEchoMode(QLineEdit.EchoMode.Password)
-            self.register_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
-    
-    def check_password_strength(self):
-        password = self.register_password.text()
-        
-        # Şifre gücü hesaplama
-        strength = 0
-        feedback = []
-        
-        # Uzunluk kontrolü
-        if len(password) >= 8:
-            strength += 25
-        else:
-            feedback.append("en az 8 karakter")
-        
-        # Büyük harf kontrolü
-        if any(c.isupper() for c in password):
-            strength += 25
-        else:
-            feedback.append("büyük harf")
-        
-        # Küçük harf kontrolü
-        if any(c.islower() for c in password):
-            strength += 25
-        else:
-            feedback.append("küçük harf")
-        
-        # Rakam kontrolü
-        if any(c.isdigit() for c in password):
-            strength += 15
-        else:
-            feedback.append("rakam")
-        
-        # Özel karakter kontrolü
-        special_chars = "!@#$%^&*()-+?_=,<>/"
-        if any(c in special_chars for c in password):
-            strength += 10
-        else:
-            feedback.append("özel karakter")
-        
-        # Şifre gücü göstergesini güncelle
-        self.password_strength_bar.setValue(strength)
-        
-        # Şifre gücü etiketini güncelle
-        if strength < 40:
-            self.password_strength_label.setText("Şifre Gücü: Zayıf")
-            self.password_strength_bar.setStyleSheet(self.password_strength_style % "#ff4d4d")
-        elif strength < 70:
-            self.password_strength_label.setText("Şifre Gücü: Orta")
-            self.password_strength_bar.setStyleSheet(self.password_strength_style % "#ffaa00")
-        elif strength < 90:
-            self.password_strength_label.setText("Şifre Gücü: Güçlü")
-            self.password_strength_bar.setStyleSheet(self.password_strength_style % "#2eb82e")
-        else:
-            self.password_strength_label.setText("Şifre Gücü: Çok Güçlü")
-            self.password_strength_bar.setStyleSheet(self.password_strength_style % "#00cc00")
-        
-        # Şifre gereksinimleri mesajını güncelle
-        if feedback:
-            self.password_requirements.setText(f"Şifre şunları içermelidir: {', '.join(feedback)}")
-        else:
-            self.password_requirements.setText("Tüm şifre gereksinimleri karşılandı ✓")
-            self.password_requirements.setStyleSheet("color: #2eb82e; font-size: 11px;")
+            logging.error(f"Login error: {str(e)}")
+            QMessageBox.critical(self, "Hata", f"Giriş işlemi sırasında bir hata oluştu: {str(e)}")
 
-    def resend_verification_code(self):
-        if not hasattr(self, 'pending_verification_user') or not self.pending_verification_user:
-            QMessageBox.warning(self, "Hata", "Doğrulama yapılacak bir kullanıcı bulunamadı.")
-            self.stacked_widget.setCurrentIndex(0)
+    def successful_login(self, user):
+        from ui.main_window import MainWindow
+        
+        self.main_window = MainWindow(user)
+        self.main_window.show()
+        self.close()
+
+    def show_register_form(self):
+        from register_form import RegisterForm
+        
+        if self.registerForm is None:
+            self.registerForm = RegisterForm()
+            
+        self.registerForm.show()
+        self.hide()
+
+class RegisterForm(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("DinamikChat - Kayıt")
+        self.setMinimumSize(800, 600)
+        self.setWindowIcon(QIcon("assets/icons/app_icon.png"))
+        
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        
+        layout = QHBoxLayout(main_widget)
+        
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(50, 50, 50, 50)
+        left_layout.setSpacing(20)
+        
+        logo_label = QLabel()
+        pixmap = QPixmap("assets/images/app_logo.png")
+        logo_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo_label.setAlignment(Qt.AlignCenter)
+        
+        app_name = QLabel("DinamikChat")
+        app_name.setFont(QFont("Arial", 24, QFont.Bold))
+        app_name.setAlignment(Qt.AlignCenter)
+        
+        app_desc = QLabel("Yapay zeka destekli gelişmiş sohbet uygulaması")
+        app_desc.setFont(QFont("Arial", 12))
+        app_desc.setWordWrap(True)
+        app_desc.setAlignment(Qt.AlignCenter)
+        
+        left_layout.addWidget(logo_label)
+        left_layout.addWidget(app_name)
+        left_layout.addWidget(app_desc)
+        left_layout.addStretch()
+        
+        right_panel = QWidget()
+        right_panel.setObjectName("registerPanel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(50, 50, 50, 50)
+        right_layout.setSpacing(20)
+        
+        register_title = QLabel("Kayıt Ol")
+        register_title.setFont(QFont("Arial", 20, QFont.Bold))
+        register_title.setAlignment(Qt.AlignCenter)
+        
+        username_label = QLabel("Kullanıcı Adı:")
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Kullanıcı adınızı girin")
+        self.username_input.setMinimumHeight(40)
+        
+        email_label = QLabel("E-posta:")
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("E-posta adresinizi girin")
+        self.email_input.setMinimumHeight(40)
+        
+        password_label = QLabel("Şifre:")
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("Şifrenizi girin")
+        self.password_input.setMinimumHeight(40)
+        
+        confirm_password_label = QLabel("Şifreyi Doğrula:")
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setEchoMode(QLineEdit.Password)
+        self.confirm_password_input.setPlaceholderText("Şifrenizi tekrar girin")
+        self.confirm_password_input.setMinimumHeight(40)
+        
+        register_button = QPushButton("Kayıt Ol")
+        register_button.setMinimumHeight(50)
+        register_button.setObjectName("primaryButton")
+        register_button.clicked.connect(self.register)
+        
+        login_layout = QHBoxLayout()
+        login_text = QLabel("Zaten hesabınız var mı?")
+        login_button = QPushButton("Giriş Yap")
+        login_button.setObjectName("linkButton")
+        login_button.clicked.connect(self.show_login_window)
+        
+        login_layout.addWidget(login_text)
+        login_layout.addWidget(login_button)
+        login_layout.setAlignment(Qt.AlignCenter)
+        
+        right_layout.addWidget(register_title)
+        right_layout.addSpacing(20)
+        right_layout.addWidget(username_label)
+        right_layout.addWidget(self.username_input)
+        right_layout.addSpacing(10)
+        right_layout.addWidget(email_label)
+        right_layout.addWidget(self.email_input)
+        right_layout.addSpacing(10)
+        right_layout.addWidget(password_label)
+        right_layout.addWidget(self.password_input)
+        right_layout.addSpacing(10)
+        right_layout.addWidget(confirm_password_label)
+        right_layout.addWidget(self.confirm_password_input)
+        right_layout.addSpacing(20)
+        right_layout.addWidget(register_button)
+        right_layout.addSpacing(10)
+        right_layout.addLayout(login_layout)
+        right_layout.addStretch()
+        
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        
+        layout.addWidget(left_panel, 1)
+        layout.addWidget(separator)
+        layout.addWidget(right_panel, 1)
+        
+        self.setup_styles()
+        
+        self.user_manager = UserManager()
+        
+        self.login_window = None
+
+    def setup_styles(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QLabel {
+                color: #333333;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                background-color: #ffffff;
+            }
+            QPushButton#primaryButton {
+                background-color: #4a86e8;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton#primaryButton:hover {
+                background-color: #3a76d8;
+            }
+            QPushButton#linkButton {
+                background-color: transparent;
+                color: #4a86e8;
+                border: none;
+                text-decoration: underline;
+                font-weight: bold;
+            }
+            QWidget#registerPanel {
+                background-color: white;
+                border-radius: 8px;
+            }
+        """)
+
+    def register(self):
+        username = self.username_input.text()
+        email = self.email_input.text()
+        password = self.password_input.text()
+        confirm_password = self.confirm_password_input.text()
+        
+        if not username or not email or not password or not confirm_password:
+            QMessageBox.warning(self, "Hata", "Tüm alanları doldurun.")
+            return
+            
+        if password != confirm_password:
+            QMessageBox.warning(self, "Hata", "Şifreler eşleşmiyor.")
             return
         
-        user_email = self.pending_verification_user.get("email") if isinstance(self.pending_verification_user, dict) else self.pending_verification_user.email
-        user_name = self.pending_verification_user.get("first_name") if isinstance(self.pending_verification_user, dict) else self.pending_verification_user.first_name
-        
         try:
-            # Yeni doğrulama kodu gönder
-            email_manager.send_verification_email(user_email, user_name)
-            QMessageBox.information(self, "Bilgi", f"Doğrulama kodu {user_email} adresine tekrar gönderildi.")
+            existing_user = self.user_manager.get_user_by_username(username)
+            if existing_user:
+                QMessageBox.warning(self, "Hata", "Bu kullanıcı adı zaten kullanılıyor.")
+                return
+                
+            existing_email = self.user_manager.get_user_by_email(email)
+            if existing_email:
+                QMessageBox.warning(self, "Hata", "Bu e-posta adresi zaten kullanılıyor.")
+                return
+                
+            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            
+            new_user = User(
+                username=username,
+                email=email,
+                password_hash=hashed_password.decode('utf-8'),
+                is_active=True,
+                is_admin=False
+            )
+            
+            self.user_manager.add_user(new_user)
+            
+            QMessageBox.information(self, "Başarılı", "Kayıt başarıyla tamamlandı. Şimdi giriş yapabilirsiniz.")
+            
+            self.show_login_window()
+            
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Kod gönderimi sırasında bir hata oluştu: {str(e)}") 
+            logging.error(f"Registration error: {str(e)}")
+            QMessageBox.critical(self, "Hata", f"Kayıt işlemi sırasında bir hata oluştu: {str(e)}")
+
+    def show_login_window(self):
+        from ui.login_window import LoginWindow
+        
+        if self.login_window is None:
+            self.login_window = LoginWindow()
+            
+        self.login_window.show()
+        self.close()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    
+    try:
+        initialize_database()
+        window = LoginWindow()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception as e:
+        logging.error(f"Application error: {str(e)}")
+        QMessageBox.critical(None, "Kritik Hata", f"Uygulama başlatılırken bir hata oluştu: {str(e)}")
+        sys.exit(1) 

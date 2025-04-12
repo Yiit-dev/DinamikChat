@@ -1,5 +1,4 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
-                            QPushButton, QLabel, QFrame, QApplication, QMenu, QMessageBox)
+from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QApplication, QMenu, QMessageBox
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QFont, QClipboard, QAction
 
@@ -284,7 +283,6 @@ class MainWindow(QMainWindow):
         self.chat_panel.update_theme(self.theme)
     
     def update_theme_button_icon(self):
-        # Tema düğmesi ikonunu ayarla
         if self.current_theme_name == 'dark':
             self.theme_button.setToolTip("Açık Tema")
             self.theme_button.setText("☀️")
