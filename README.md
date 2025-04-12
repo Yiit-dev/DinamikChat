@@ -7,15 +7,33 @@ GPT entegreli, 3D model animasyonu ile sesli yanıt veren holografik sohbet uygu
 - OpenAI ChatGPT API entegrasyonu
 - 3D hologram modeli görüntüleme ve animasyon
 - Ağız hareketleriyle sesli yanıt verme
-- Kullanıcı hesap yönetimi (kayıt, giriş, şifre sıfırlama)
-- E-posta doğrulama sistemi
+- Gelişmiş kullanıcı hesap yönetimi
+  - Kayıt ve giriş sistemi
+  - E-posta doğrulama sistemi
+  - Şifre sıfırlama
+  - Doğrulama kodu tekrar gönderme
+- Güvenlik özellikleri
+  - Şifre gücü anlık kontrolü
+  - Görsel şifre göstergesi
+  - Göz ikonu ile şifre görünürlüğü kontrolü
+  - Kapsamlı parola politikası
+  - Güvenli oturum yönetimi
 - Sohbet kanalları oluşturma ve yönetme
 - Sohbet arşivleme ve dışa aktarma
-- Karanlık tema ve modern arayüz
-- Responsive tasarım ve animasyonlar
+- Tema seçenekleri
+  - Koyu tema
+  - Açık tema
+- Modern ve animasyonlu arayüz
+- Responsive tasarım
 - Ses tanıma ile mesaj gönderme
-- Farklı AI yanıt modları (Normal, Edebi, Öğretici)
+- Farklı AI yanıt modları
+  - Normal mod
+  - Edebi mod
+  - Öğretici mod
+  - Teknik mod
+  - Sohbet modu
 - Web arama ve akıl yürütme özellikleri
+- Özelleştirilebilir 3D modeller (Robot, Asistan)
 
 ## Kurulum
 
@@ -24,15 +42,15 @@ GPT entegreli, 3D model animasyonu ile sesli yanıt veren holografik sohbet uygu
    pip install -r requirements.txt
    ```
 
-2. `settings.json` dosyasını yapılandırın:
-   - `api.openai.api_key` alanına OpenAI API anahtarınızı girin
-   - `email.user` ve `email.password` alanlarını e-posta gönderimi için yapılandırın
+2. *Eklenecek*
 
-3. 3D model dosyasını `assets/models/` dizinine yerleştirin:
-   - Bir `.obj` formatında kafa modelini `assets/models/head.obj` olarak kaydedin veya
-   - `settings.json` dosyasında model yolunu değiştirin
+3. 3D model dosyaları: (ESKI VERSIYON YENI MODEL GIF ILE YAPILACAK)
+   - Varsayılan model: `assets/models/head.obj`
+   - Ek modeller: `assets/models/robot.obj`, `assets/models/assistant.obj`
 
-4. Simgeler ve diğer görsel öğeleri `assets/icons/` ve `assets/styles/` dizinlerine yerleştirin.
+4. E-posta şablonları:
+   - `email_templates/verification.html`
+   - `email_templates/password_reset.html`
 
 ## Kullanım
 
@@ -42,7 +60,7 @@ Uygulamayı başlatmak için:
 python main.py
 ```
 
-- İlk kullanımda veritabanı otomatik olarak oluşturulur.
+- İlk kullanımda veritabanı otomatik olarak oluşturulur
 - Varsayılan admin kullanıcısı:
   - Kullanıcı adı: `admin`
   - Parola: `admin123`
@@ -51,17 +69,20 @@ python main.py
 
 - Python 3.8 veya üzeri
 - OpenGL destekleyen bir grafik kartı
-- Mikrofon (sesli komutlar için)
-- Internet bağlantısı (ChatGPT API için)
+- Mikrofon (sesli komutlar için) (Opsiyonel)
+- Internet bağlantısı (:D)
 
 ## Proje Yapısı
 
 - `database/`: Veritabanı modelleri ve işlemleri
 - `ui/`: Kullanıcı arayüzü bileşenleri
 - `utils/`: Yardımcı modüller (e-posta, API entegrasyonu, model yönetimi)
-- `assets/`: Görsel öğeler ve 3D modeller
-- `settings.json`: Uygulama ayarları ve yapılandırma (API anahtarları, e-posta bilgileri)
-
-## Lisans
-
-Bu proje MIT lisansı altında lisanslanmıştır. 
+- `assets/`: 
+  - `models/`: 3D model dosyaları
+  - `icons/`: Arayüz ikonları
+  - `styles/`: CSS stilleri
+  - `textures/`: Doku dosyaları
+- `email_templates/`: E-posta doğrulama ve şifre sıfırlama şablonları
+- `uploads/`: Kullanıcı yüklemeleri
+- `backups/`: Veritabanı yedekleri
+- `settings.json`: Uygulama ayarları ve yapılandırma

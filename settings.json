@@ -131,13 +131,23 @@
             "message_alignment": "right",
             "show_timestamps": true,
             "show_user_avatars": true
-        },
-        "email": {
-            "user": "dinamikchatt@gmail.com",
-            "password": "MAIL_PASSWORD",
-            "smtp_server": "smtp.gmail.com",
-            "smtp_port": 587,
-            "verification": {
+        }
+    },
+    "api": {
+        "openai": {
+            "model": "gpt-3.5-turbo",
+            "api_key": "OPENAI_API_KEY",
+            "temperature": 0.7,
+            "max_tokens": 2000,
+            "fallback_models": ["gpt-3.5-turbo-instruct"]
+        }
+    },
+    "email": {
+        "user": "dinamikchatt@gmail.com",
+        "password": "MAIL_PASSWORD",
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "verification": {
             "subject": "DinamikChat - E-posta Doğrulama",
             "expiry_hours": 24,
             "template": "email_templates/verification.html"
