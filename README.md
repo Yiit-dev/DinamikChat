@@ -86,3 +86,8 @@ python main.py
 - `uploads/`: Kullanıcı yüklemeleri
 - `backups/`: Veritabanı yedekleri
 - `settings.json`: Uygulama ayarları ve yapılandırma
+
+## Eklenecekler
+
+- Mail gönderme sorunu giderilecek
+- Model entegrasyonu obj yerine gif haline getirilecek (yüksek ihtimalle ikisi bir arada olabilir)
