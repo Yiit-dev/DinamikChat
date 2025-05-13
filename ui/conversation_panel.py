@@ -1,510 +1,615 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QScrollArea, QFrame, QMenu, QFileDialog,QInputDialog, QMessageBox, QSizePolicy
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QIcon, QFont
-import json
-import os
-import datetime
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QScrollArea, QFrame, QHBoxLayout, QMenu, QLineEdit, QDialog, QSizePolicy, QMessageBox
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QPropertyAnimation, QEasingCurve, QPoint
+from PyQt6.QtGui import QIcon, QFont, QAction, QColor, QPainter, QPainterPath
 
-from database import Conversation, get_db_session, Message
-from utils.animation_utils import AnimationUtils
+import datetime
+from database import Conversation, get_db_session
 
 class ConversationButton(QPushButton):
-    selected = pyqtSignal(Conversation)
-    delete_requested = pyqtSignal(Conversation)
-    rename_requested = pyqtSignal(Conversation)
-    archive_requested = pyqtSignal(Conversation)
-    
     def __init__(self, conversation, parent=None):
         super().__init__(parent)
         self.conversation = conversation
         self.setObjectName("conversationButton")
-        self.setText(conversation.name)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(40)
         self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         
-        self.clicked.connect(self.handle_clicked)
-
-        self.setWindowOpacity(0)
-        self.fade_in()
+        self.setMinimumHeight(60)
+        self.setMaximumHeight(60)
+        
+        self.init_ui()
     
-    def fade_in(self):
-        self.fade_animation = AnimationUtils.fade_animation(self, 0.0, 1.0, 300)
-        self.fade_animation.start()
+    def init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 8, 10, 8)
+        layout.setSpacing(10)
+        
+        # Kanal ikonu
+        self.icon_label = QLabel()
+        self.icon_label.setObjectName("channelIcon")
+        self.icon_label.setFixedSize(32, 32)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Kanal adının ilk harfini al
+        first_letter = self.conversation.name[0].upper()
+        self.icon_label.setText(first_letter)
+        
+        # Kanal içeriği
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(4)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        # Kanal adı
+        title_label = QLabel(self.conversation.name)
+        title_label.setObjectName("channelTitle")
+        title_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        
+        # Tarih/saat
+        date_str = "Bugün" if datetime.date.today() == self.conversation.created_at.date() else self.conversation.created_at.strftime("%d/%m/%Y")
+        date_label = QLabel(date_str)
+        date_label.setObjectName("channelDate")
+        date_label.setFont(QFont("Arial", 9))
+        
+        content_layout.addWidget(title_label)
+        content_layout.addWidget(date_label)
+        
+        # İşlem butonları
+        actions_container = QWidget()
+        actions_container.setFixedWidth(90)
+        actions_container.setObjectName("actionButtonsContainer")
+        actions_layout = QHBoxLayout(actions_container)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(6)
+        actions_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        # Yeniden adlandırma butonu
+        self.rename_btn = QPushButton()
+        self.rename_btn.setObjectName("actionButton")
+        self.rename_btn.setIcon(QIcon("assets/icons/edit_icon.png"))
+        self.rename_btn.setIconSize(QSize(14, 14))
+        self.rename_btn.setFixedSize(24, 24)
+        self.rename_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.rename_btn.setToolTip("Yeniden Adlandır")
+        self.rename_btn.setProperty("action", "rename")
+        
+        # Arşivleme butonu
+        self.archive_btn = QPushButton()
+        self.archive_btn.setObjectName("actionButton")
+        self.archive_btn.setIcon(QIcon("assets/icons/archive_icon.png"))
+        self.archive_btn.setIconSize(QSize(14, 14))
+        self.archive_btn.setFixedSize(24, 24)
+        self.archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.archive_btn.setToolTip("Arşivle")
+        self.archive_btn.setProperty("action", "archive")
+        
+        # Silme butonu
+        self.delete_btn = QPushButton()
+        self.delete_btn.setObjectName("actionButton")
+        self.delete_btn.setIcon(QIcon("assets/icons/delete_icon.png"))
+        self.delete_btn.setIconSize(QSize(14, 14))
+        self.delete_btn.setFixedSize(24, 24)
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_btn.setToolTip("Sil")
+        self.delete_btn.setProperty("action", "delete")
+        
+        actions_layout.addWidget(self.rename_btn)
+        actions_layout.addWidget(self.archive_btn)
+        actions_layout.addWidget(self.delete_btn)
+        
+        actions_container.setVisible(False)
+        
+        layout.addWidget(self.icon_label)
+        layout.addLayout(content_layout, 1)
+        layout.addWidget(actions_container)
+        
+        self.actions_container = actions_container
     
-    def handle_clicked(self):
-        self.selected.emit(self.conversation)
+    def enterEvent(self, event):
+        self.actions_container.setVisible(True)
+        super().enterEvent(event)
     
-    def contextMenuEvent(self, event):
-        menu = QMenu(self)
-        
-        rename_action = menu.addAction("Yeniden Adlandır")
-        archive_action = menu.addAction("Arşivle")
-        delete_action = menu.addAction("Sil")
-        
-        action = menu.exec(self.mapToGlobal(event.pos()))
-        
-        if action == rename_action:
-            self.rename_requested.emit(self.conversation)
-        elif action == archive_action:
-            self.archive_requested.emit(self.conversation)
-        elif action == delete_action:
-            self.delete_requested.emit(self.conversation)
+    def leaveEvent(self, event):
+        self.actions_container.setVisible(False)
+        super().leaveEvent(event)
 
 class ConversationPanel(QWidget):
-    conversation_selected = pyqtSignal(Conversation)
-    toggle_panel = pyqtSignal(bool)
+    conversation_selected = pyqtSignal(object)
     
     def __init__(self, user, parent=None):
         super().__init__(parent)
-        
-        with open('settings.json', 'r', encoding='utf-8') as f:
-            self.settings = json.load(f)
-        
-        self.theme = self.settings['ui']['theme']['dark']
         self.user = user
-        self.conversations = []
-        self.current_conversation = None
-        self.conversation_buttons = {}
-        self.is_expanded = True
-        self.max_conversations = 10
+        self.buttons = []
+        self.selected_conversation = None
         
         self.init_ui()
         self.load_conversations()
     
     def init_ui(self):
-        self.setFixedWidth(250)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(5)
-
-        header_frame = QFrame()
-        header_frame.setObjectName("panelHeader")
-        header_frame.setFixedHeight(50)
+        # Kanal listesi için üst konteyner
+        header_container = QWidget()
+        header_container.setFixedHeight(40)
+        header_container.setObjectName("headerContainer")
         
-        header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(10, 0, 10, 0)
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(15, 0, 15, 0)
         
         title_label = QLabel("Sohbet Kanalları")
         title_label.setObjectName("panelTitle")
         title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         
-        self.toggle_button = QPushButton("◀")
-        self.toggle_button.setObjectName("toggleButton")
-        self.toggle_button.setFixedSize(30, 30)
-        self.toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_button.clicked.connect(self.toggle_panel_visibility)
+        add_btn = QPushButton()
+        add_btn.setObjectName("addButton")
+        add_btn.setIcon(QIcon("assets/icons/add_icon.png"))
+        add_btn.setIconSize(QSize(16, 16))
+        add_btn.setFixedSize(28, 28)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.setToolTip("Yeni Kanal Ekle")
+        add_btn.clicked.connect(self.create_new_conversation_dialog)
         
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-        header_layout.addWidget(self.toggle_button)
-
-        new_chat_button = QPushButton("+ Yeni Sohbet")
-        new_chat_button.setObjectName("newChatButton")
-        new_chat_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_chat_button.clicked.connect(self.create_new_conversation)
+        header_layout.addWidget(add_btn)
         
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Kanal listesi için kapsayıcı
+        scrollArea = QScrollArea()
+        scrollArea.setWidgetResizable(True)
+        scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scrollArea.setFrameShape(QFrame.Shape.NoFrame)
+        scrollArea.setStyleSheet("""
+            QScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+        """)
         
-        self.conversations_container = QWidget()
-        self.conversations_layout = QVBoxLayout(self.conversations_container)
-        self.conversations_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.conversations_layout.setContentsMargins(5, 5, 5, 5)
-        self.conversations_layout.setSpacing(5)
+        self.content_widget = QWidget()
+        self.content_widget.setObjectName("conversationContainer")
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 5)
+        self.content_layout.setSpacing(1)
+        self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        scroll_area.setWidget(self.conversations_container)
-
-        main_layout.addWidget(header_frame)
-        main_layout.addWidget(new_chat_button)
-        main_layout.addWidget(scroll_area)
+        scrollArea.setWidget(self.content_widget)
         
-        self.apply_styles()
+        # Düzene widget'ları ekle
+        layout.addWidget(header_container)
+        layout.addWidget(scrollArea, 1)
         
-        self.start_appearance_animation()
-    
-    def start_appearance_animation(self):
-        self.setWindowOpacity(0)
-        self.fade_animation = AnimationUtils.fade_animation(self, 0.0, 1.0, 500)
-        self.fade_animation.start()
-    
-    def apply_styles(self):
+        # Stil uygula
         self.setStyleSheet("""
-            QWidget {
-                background-color: #1A1A1A;
-                color: #F0F0F0;
+            #conversationContainer {
+                background-color: transparent;
             }
             
-            #panelHeader {
-                background-color: #2A2A2A;
-                border-bottom: 1px solid #3A3A3A;
+            #headerContainer {
+                background-color: transparent;
+                border-bottom: 1px solid #3E3E3E;
             }
             
             #panelTitle {
-                color: #E0E0E0;
+                color: #FFFFFF;
                 font-weight: bold;
             }
             
-            #toggleButton {
-                background-color: #00AAFF;
-                color: white;
-                border: none;
-                border-radius: 15px;
-                font-weight: bold;
-            }
-            
-            #toggleButton:hover {
-                background-color: #0088CC;
-            }
-            
-            #newChatButton {
-                background-color: #2A2A2A;
-                color: #F0F0F0;
-                border: 1px solid #3A3A3A;
-                border-radius: 5px;
-                padding: 8px;
-                margin: 5px 10px;
-            }
-            
-            #newChatButton:hover {
+            #addButton {
                 background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 14px;
+                padding: 2px;
+            }
+            
+            #addButton:hover {
+                background-color: #1E88E5;
+            }
+            
+            #addButton:pressed {
+                background-color: #1976D2;
             }
             
             #conversationButton {
-                background-color: #2A2A2A;
-                color: #F0F0F0;
+                background-color: transparent;
                 border: none;
-                border-radius: 5px;
-                padding: 8px;
+                border-radius: 0px;
                 text-align: left;
+                margin: 0px;
+                padding: 0px;
             }
             
             #conversationButton:hover {
-                background-color: #3A3A3A;
+                background-color: rgba(255, 255, 255, 0.05);
             }
             
             #conversationButton:checked {
-                background-color: #00AAFF;
+                background-color: rgba(30, 136, 229, 0.2);
+                border-left: 3px solid #1E88E5;
+            }
+            
+            #channelIcon {
+                background-color: #1976D2;
+                border-radius: 16px;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+            }
+            
+            #conversationButton:checked #channelIcon {
+                background-color: #1E88E5;
                 color: white;
             }
             
-            QScrollArea {
+            #channelTitle {
+                color: #FFFFFF;
+                font-weight: bold;
+            }
+            
+            #channelDate {
+                color: #AAAAAA;
+                font-size: 9pt;
+            }
+            
+            #actionButtonsContainer {
+                background-color: transparent;
+            }
+            
+            #actionButton {
+                background-color: #3A3A3A;
                 border: none;
+                border-radius: 12px;
+                padding: 2px;
+            }
+            
+            #actionButton:hover {
+                background-color: #1E88E5;
+            }
+            
+            #actionButton[action="delete"]:hover {
+                background-color: #F44336;
             }
         """)
     
     def load_conversations(self):
         session = get_db_session()
+        conversations = session.query(Conversation).filter_by(user_id=self.user.user_id).order_by(Conversation.created_at.desc()).all()
+        session.close()
         
-        try:
-            conversations = session.query(Conversation).filter_by(
-                user_id=self.user.user_id,
-                is_archived=False
-            ).order_by(Conversation.created_at.desc()).all()
-            
-            self.conversations = conversations
-
-            for button in self.conversation_buttons.values():
-                self.conversations_layout.removeWidget(button)
-                button.deleteLater()
-            
-            self.conversation_buttons = {}
-            
-            for conversation in conversations:
-                self.add_conversation_button(conversation)
-            
-            if conversations and not self.current_conversation:
-                self.select_conversation(conversations[0])
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Sohbetler yüklenirken bir hata oluştu: {str(e)}")
-        finally:
-            session.close()
+        self.clear_conversations()
+        
+        for conversation in conversations:
+            self.add_conversation_button(conversation)
+        
+        if self.buttons and conversations:
+            self.select_conversation(conversations[0])
     
     def add_conversation_button(self, conversation):
         button = ConversationButton(conversation)
-        button.selected.connect(self.select_conversation)
-        button.delete_requested.connect(self.delete_conversation)
-        button.rename_requested.connect(self.rename_conversation)
-        button.archive_requested.connect(self.archive_conversation)
+        button.clicked.connect(lambda checked, c=conversation: self.conversation_clicked(c))
         
-        self.conversations_layout.addWidget(button)
-        self.conversation_buttons[conversation.conversation_id] = button
+        # Buton aksiyonlarını bağla
+        button.rename_btn.clicked.connect(lambda: self.rename_conversation(conversation))
+        button.archive_btn.clicked.connect(lambda: self.archive_conversation(conversation))
+        button.delete_btn.clicked.connect(lambda: self.delete_conversation(conversation))
         
-        if self.current_conversation and self.current_conversation.conversation_id == conversation.conversation_id:
-            button.setChecked(True)
+        self.content_layout.addWidget(button)
+        self.buttons.append(button)
+        
+        return button
     
-    def select_conversation(self, conversation):
-        if self.current_conversation:
-            if conversation.conversation_id == self.current_conversation.conversation_id:
-                return
-            
-            if self.current_conversation.conversation_id in self.conversation_buttons:
-                self.conversation_buttons[self.current_conversation.conversation_id].setChecked(False)
-        
-        self.current_conversation = conversation
-        
-        if conversation.conversation_id in self.conversation_buttons:
-            self.conversation_buttons[conversation.conversation_id].setChecked(True)
-        
+    def clear_conversations(self):
+        self.buttons = []
+        for i in reversed(range(self.content_layout.count())):
+            widget = self.content_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+    
+    def conversation_clicked(self, conversation):
+        self.select_conversation(conversation)
         self.conversation_selected.emit(conversation)
     
-    def create_new_conversation(self):
-        if len(self.conversations) >= self.max_conversations:
-            QMessageBox.warning(self, "Limit Aşıldı", f"Maksimum {self.max_conversations} sohbet kanalı oluşturabilirsiniz. Devam etmek için bazı sohbetleri arşivleyin veya silin.")
-            return
+    def select_conversation(self, conversation):
+        self.selected_conversation = conversation
         
-        name, ok = QInputDialog.getText(self, "Yeni Sohbet", "Sohbet adı:")
-        
-        if ok and name:
-            session = get_db_session()
-            
-            try:
-                new_conversation = Conversation(
-                    conversation_id=Conversation.generate_conversation_id(),
-                    user_id=self.user.user_id,
-                    name=name
-                )
-                
-                session.add(new_conversation)
-                session.commit()
-                
-                self.conversations.insert(0, new_conversation)
-                self.add_conversation_button(new_conversation)
-                
-                self.select_conversation(new_conversation)
-                
-            except Exception as e:
-                session.rollback()
-                QMessageBox.critical(self, "Hata", f"Yeni sohbet oluşturulurken bir hata oluştu: {str(e)}")
-            finally:
-                session.close()
-    
-    def rename_conversation(self, conversation):
-        name, ok = QInputDialog.getText(
-            self, "Sohbeti Yeniden Adlandır", 
-            "Yeni sohbet adı:", 
-            text=conversation.name
-        )
-        
-        if ok and name:
-            session = get_db_session()
-            
-            try:
-                db_conversation = session.query(Conversation).filter_by(
-                    conversation_id=conversation.conversation_id
-                ).first()
-                
-                if db_conversation:
-                    db_conversation.name = name
-                    session.commit()
-                    
-                    if conversation.conversation_id in self.conversation_buttons:
-                        self.conversation_buttons[conversation.conversation_id].setText(name)
-                    
-                    if self.current_conversation and self.current_conversation.conversation_id == conversation.conversation_id:
-                        self.current_conversation.name = name
-                    
-            except Exception as e:
-                session.rollback()
-                QMessageBox.critical(self, "Hata", f"Sohbet yeniden adlandırılırken bir hata oluştu: {str(e)}")
-            finally:
-                session.close()
-    
-    def delete_conversation(self, conversation):
-        reply = QMessageBox.question(
-            self, "Sohbeti Sil", 
-            f"'{conversation.name}' sohbetini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            session = get_db_session()
-            
-            try:
-                db_conversation = session.query(Conversation).filter_by(
-                    conversation_id=conversation.conversation_id
-                ).first()
-                
-                if db_conversation:
-                    session.delete(db_conversation)
-                    session.commit()
-                    
-                    if conversation.conversation_id in self.conversation_buttons:
-                        button = self.conversation_buttons[conversation.conversation_id]
-                        
-                        fade_out = AnimationUtils.fade_animation(button, 1.0, 0.0, 200)
-                        fade_out.finished.connect(lambda: self.remove_button_after_animation(button, conversation.conversation_id))
-                        fade_out.start()
-                        
-                    self.conversations = [c for c in self.conversations if c.conversation_id != conversation.conversation_id]
-                    
-                    if self.current_conversation and self.current_conversation.conversation_id == conversation.conversation_id:
-                        if self.conversations:
-                            self.select_conversation(self.conversations[0])
-                        else:
-                            self.current_conversation = None
-                            self.conversation_selected.emit(None)
-                    
-            except Exception as e:
-                session.rollback()
-                QMessageBox.critical(self, "Hata", f"Sohbet silinirken bir hata oluştu: {str(e)}")
-            finally:
-                session.close()
-    
-    def remove_button_after_animation(self, button, conversation_id):
-        self.conversations_layout.removeWidget(button)
-        button.deleteLater()
-        if conversation_id in self.conversation_buttons:
-            del self.conversation_buttons[conversation_id]
+        for button in self.buttons:
+            button.setChecked(button.conversation == conversation)
     
     def archive_conversation(self, conversation):
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Sohbeti Arşivle", 
-            f"{conversation.name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            "Metin Dosyaları (*.txt)"
-        )
+        confirm_dialog = QMessageBox()
+        confirm_dialog.setWindowTitle("Arşivleme Onayı")
+        confirm_dialog.setText(f"{conversation.name} kanalı arşivlenecek. Onaylıyor musunuz?")
+        confirm_dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        confirm_dialog.setDefaultButton(QMessageBox.StandardButton.No)
         
-        if not file_path:
-            return
-        
-        session = get_db_session()
-        
-        try:
-            messages = session.query(Message).filter_by(
-                conversation_id=conversation.conversation_id
-            ).order_by(Message.message_date).all()
-            
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(f"Sohbet: {conversation.name}\n")
-                f.write(f"Tarih: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                
-                for message in messages:
-                    date_str = message.message_date.strftime('%Y-%m-%d %H:%M:%S')
-                    f.write(f"[{date_str}] Kullanıcı: {message.message_content}\n")
-                    if message.response_message:
-                        f.write(f"[{date_str}] DinamikChat: {message.response_message}\n")
-                    f.write("\n")
-            
-            db_conversation = session.query(Conversation).filter_by(
-                conversation_id=conversation.conversation_id
-            ).first()
+        if confirm_dialog.exec() == QMessageBox.StandardButton.Yes:
+            session = get_db_session()
+            db_conversation = session.query(Conversation).filter_by(conversation_id=conversation.conversation_id).first()
             
             if db_conversation:
                 db_conversation.is_archived = True
                 session.commit()
                 
-                if conversation.conversation_id in self.conversation_buttons:
-                    button = self.conversation_buttons[conversation.conversation_id]
-                    fade_out = AnimationUtils.fade_animation(button, 1.0, 0.0, 300)
-                    fade_out.finished.connect(lambda: self.remove_button_after_animation(button, conversation.conversation_id))
-                    fade_out.start()
+                # UI güncellemesi
+                self.load_conversations()
                 
-                self.conversations = [c for c in self.conversations if c.conversation_id != conversation.conversation_id]
-                
-                if self.current_conversation and self.current_conversation.conversation_id == conversation.conversation_id:
-                    if self.conversations:
-                        self.select_conversation(self.conversations[0])
+                # Arşivlenen sohbet seçili ise başka bir sohbeti seç
+                if self.selected_conversation and self.selected_conversation.conversation_id == conversation.conversation_id:
+                    remaining_conversations = session.query(Conversation).filter_by(
+                        user_id=self.user.user_id, 
+                        is_archived=False
+                    ).all()
+                    
+                    if remaining_conversations:
+                        self.select_conversation(remaining_conversations[0])
+                        self.conversation_selected.emit(remaining_conversations[0])
                     else:
-                        self.current_conversation = None
+                        self.selected_conversation = None
                         self.conversation_selected.emit(None)
-                
-                QMessageBox.information(self, "Başarılı", f"Sohbet başarıyla arşivlendi ve kaydedildi: {file_path}")
-                
-        except Exception as e:
-            session.rollback()
-            QMessageBox.critical(self, "Hata", f"Sohbet arşivlenirken bir hata oluştu: {str(e)}")
-        finally:
+            
             session.close()
     
-    def toggle_panel_visibility(self):
-        self.is_expanded = not self.is_expanded
-        
-        animation, is_expanding = AnimationUtils.panel_toggle_animation(
-            self, 250, 50, 300,
-            lambda: self.toggle_panel.emit(is_expanding)
-        )
-        
-        animation.valueChanged.connect(
-            lambda val: self.toggle_button.setText("◀" if val > 150 else "▶")
-        )
-        
-        animation.start()
-
-    def toggle_expand(self):
-        self.is_expanded = not self.is_expanded
-        
-        if self.is_expanded:
-            self.setFixedWidth(250)
-            self.toggle_button.setIcon(QIcon("assets/icons/chevron_left.svg"))
-            self.conversations_layout.setVisible(True)
-            self.toggle_button.setVisible(True)
-        else:
-            self.setFixedWidth(50)
-            self.toggle_button.setIcon(QIcon("assets/icons/chevron_right.svg"))
-            self.conversations_layout.setVisible(False)
-            self.toggle_button.setVisible(True)
-        
-        self.toggle_panel.emit(self.is_expanded)
-
-    def update_theme(self, theme):
-
-        self.theme = theme
-        
-        self.setStyleSheet(f"""
-            ConversationPanel {{
-                background-color: {self.theme['secondary']};
-                border-right: 1px solid {self.theme['border']};
-            }}
+    def create_new_conversation_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Yeni Sohbet")
+        dialog.setFixedSize(400, 150)
+        dialog.setWindowFlags(dialog.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1F2937;
+            }
             
-            QLabel {{
-                color: {self.theme['foreground']};
-            }}
+            QLabel {
+                color: #E6EDF3;
+                font-size: 12px;
+            }
             
-            #panelTitle {{
-                font-weight: bold;
-                font-size: 16px;
-                color: {self.theme['foreground']};
-            }}
-            
-            #toggleButton, #newChatButton {{
-                background-color: {self.theme['secondary']};
-                border: none;
-                border-radius: 15px;
-            }}
-            
-            #toggleButton:hover, #newChatButton:hover {{
-                background-color: {self.theme['hover']};
-            }}
-            
-            QListWidget {{
-                background-color: {self.theme['secondary']};
-                border: none;
-                color: {self.theme['foreground']};
-                selection-background-color: {self.theme['accent']};
-                selection-color: white;
-            }}
-            
-            QListWidget::item {{
-                padding: 8px;
+            QLineEdit {
+                background-color: #0D1117;
+                color: #E6EDF3;
+                border: 1px solid #30363D;
                 border-radius: 5px;
-            }}
+                padding: 10px;
+                font-size: 13px;
+            }
             
-            QListWidget::item:hover {{
-                background-color: {self.theme['hover']};
-            }}
+            QLineEdit:focus {
+                border: 1px solid #3182CE;
+            }
             
-            QMenu {{
-                background-color: {self.theme['secondary']};
-                color: {self.theme['foreground']};
-                border: 1px solid {self.theme['border']};
-            }}
-            
-            QMenu::item:selected {{
-                background-color: {self.theme['accent']};
+            QPushButton {
+                background-color: #3182CE;
                 color: white;
-            }}
-        """) 
+                border: none;
+                border-radius: 5px;
+                padding: 10px 20px;
+                font-weight: bold;
+            }
+            
+            QPushButton:hover {
+                background-color: #4299E1;
+            }
+            
+            QPushButton#cancelButton {
+                background-color: #2D3748;
+                color: #E6EDF3;
+                border: 1px solid #4A5568;
+            }
+            
+            QPushButton#cancelButton:hover {
+                background-color: #4A5568;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        name_label = QLabel("Sohbet Adı:")
+        name_input = QLineEdit()
+        name_input.setText(f"Yeni Sohbet {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        name_input.selectAll()
+        
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(10)
+        
+        cancel_button = QPushButton("İptal")
+        cancel_button.setObjectName("cancelButton")
+        
+        create_button = QPushButton("Oluştur")
+        
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(create_button)
+        
+        layout.addWidget(name_label)
+        layout.addWidget(name_input)
+        layout.addLayout(button_layout)
+        
+        cancel_button.clicked.connect(dialog.reject)
+        create_button.clicked.connect(lambda: self.finish_create_conversation(name_input.text(), dialog))
+        
+        dialog.exec()
+    
+    def finish_create_conversation(self, name, dialog):
+        if name.strip():
+            new_conversation = self.create_new_conversation(name)
+            if new_conversation:
+                self.select_conversation(new_conversation)
+                self.conversation_selected.emit(new_conversation)
+            dialog.accept()
+        else:
+            name_input.setFocus()
+    
+    def create_new_conversation(self, name):
+        session = get_db_session()
+        
+        new_conversation = Conversation(
+            conversation_id=Conversation.generate_conversation_id(),
+            user_id=self.user.user_id,
+            name=name
+        )
+        
+        session.add(new_conversation)
+        session.commit()
+        
+        button = self.add_conversation_button(new_conversation)
+        
+        # Animasyon ile vurgula
+        animation = QPropertyAnimation(button, b"maximumHeight")
+        animation.setDuration(300)
+        animation.setStartValue(0)
+        animation.setEndValue(60)
+        animation.setEasingCurve(QEasingCurve.Type.OutBack)
+        animation.start()
+        
+        session.close()
+        return new_conversation
+    
+    def rename_conversation(self, conversation):
+        # Yeniden adlandırma diyaloğu
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Sohbeti Yeniden Adlandır")
+        dialog.setFixedSize(400, 150)
+        dialog.setWindowFlags(dialog.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1F2937;
+            }
+            
+            QLabel {
+                color: #E6EDF3;
+                font-size: 12px;
+            }
+            
+            QLineEdit {
+                background-color: #0D1117;
+                color: #E6EDF3;
+                border: 1px solid #30363D;
+                border-radius: 5px;
+                padding: 10px;
+                font-size: 13px;
+            }
+            
+            QLineEdit:focus {
+                border: 1px solid #3182CE;
+            }
+            
+            QPushButton {
+                background-color: #3182CE;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 20px;
+                font-weight: bold;
+            }
+            
+            QPushButton:hover {
+                background-color: #4299E1;
+            }
+            
+            QPushButton#cancelButton {
+                background-color: #2D3748;
+                color: #E6EDF3;
+                border: 1px solid #4A5568;
+            }
+            
+            QPushButton#cancelButton:hover {
+                background-color: #4A5568;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        name_label = QLabel("Yeni İsim:")
+        name_input = QLineEdit()
+        name_input.setText(conversation.name)
+        name_input.selectAll()
+        
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(10)
+        
+        cancel_button = QPushButton("İptal")
+        cancel_button.setObjectName("cancelButton")
+        
+        save_button = QPushButton("Kaydet")
+        
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(save_button)
+        
+        layout.addWidget(name_label)
+        layout.addWidget(name_input)
+        layout.addLayout(button_layout)
+        
+        cancel_button.clicked.connect(dialog.reject)
+        save_button.clicked.connect(lambda: self.finish_rename_conversation(conversation, name_input.text(), dialog))
+        
+        dialog.exec()
+    
+    def finish_rename_conversation(self, conversation, new_name, dialog):
+        if new_name.strip():
+            session = get_db_session()
+            conv = session.query(Conversation).filter_by(conversation_id=conversation.conversation_id).first()
+            if conv:
+                conv.name = new_name
+                session.commit()
+                
+                # Butonları güncelle
+                self.load_conversations()
+                
+                # Aynı sohbet seçili kalsın
+                self.select_conversation(conv)
+            
+            session.close()
+            dialog.accept()
+        else:
+            name_input.setFocus()
+    
+    def delete_conversation(self, conversation):
+        from PyQt6.QtWidgets import QMessageBox
+        
+        reply = QMessageBox.question(
+            self,
+            "Sohbeti Sil",
+            f"'{conversation.name}' sohbetini silmek istediğinizden emin misiniz?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            session = get_db_session()
+            conv = session.query(Conversation).filter_by(conversation_id=conversation.conversation_id).first()
+            
+            if conv:
+                session.delete(conv)
+                session.commit()
+                
+                is_selected = (self.selected_conversation == conversation)
+                
+                # Butonları güncelle
+                self.load_conversations()
+                
+                # Seçili sohbet silindiyse ve başka sohbet varsa ilkini seç
+                if is_selected and self.buttons:
+                    self.conversation_clicked(self.buttons[0].conversation)
+                elif is_selected:
+                    # Hiç sohbet kalmadıysa sinyali boş olarak gönder
+                    self.conversation_selected.emit(None)
+            
+            session.close()
+    
+    def share_conversation(self, conversation):
+        # Paylaşım özelliği (henüz uygulanmadı)
+        from PyQt6.QtWidgets import QMessageBox
+        
+        QMessageBox.information(
+            self,
+            "Paylaşım",
+            "Sohbet paylaşım özelliği henüz mevcut değil.",
+            QMessageBox.StandardButton.Ok
+        ) 

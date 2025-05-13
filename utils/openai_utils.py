@@ -1,91 +1,105 @@
-import openai
 import os
 import json
 import threading
-from queue import Queue
+import time
+import requests
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
-class ChatGPTManager:
+class OpenAIChatManager(QObject):
+    response_received = pyqtSignal(str)
+    
     def __init__(self):
+        super().__init__()
+        
         with open('settings.json', 'r', encoding='utf-8') as f:
             settings = json.load(f)
         
-        self.api_key = settings['api']['openai']['api_key']
-        self.model = settings['api']['openai']['model']
-        self.modes = settings['ui']['modes']
-        self.current_mode = 'normal'
-        self.current_mode_prompt = self.modes.get('normal', "")
-        self.web_search_enabled = False
-        self.reason_enabled = False
+        self.api_key = settings['openai']['api_key']
+        self.model = settings['openai']['model']
+        self.temperature = settings['openai']['temperature']
+        self.max_tokens = settings['openai']['max_tokens']
         
-        openai.api_key = self.api_key
+        self.lock = threading.Lock()
+        self.busy = False
     
-    def set_api_key(self, api_key):
-        self.api_key = api_key
-        openai.api_key = api_key
-    
-    def set_mode(self, mode):
-        if mode in self.modes:
-            self.current_mode = mode
-            self.current_mode_prompt = self.modes.get(mode, "")
-    
-    def set_response_mode(self, mode_prompt):
-        """ChatGPT'nin cevap modunu ayarlar
+    def get_response(self, user_input, callback=None):
+        if self.busy:
+            return False
         
-        Args:
-            mode_prompt (str): Modun prompt metni
-        """
-        self.current_mode_prompt = mode_prompt
-    
-    def toggle_web_search(self):
-        self.web_search_enabled = not self.web_search_enabled
-        return self.web_search_enabled
-    
-    def toggle_reason(self):
-        self.reason_enabled = not self.reason_enabled
-        return self.reason_enabled
-    
-    def get_response(self, message, callback=None):
-        prompt_suffix = self.current_mode_prompt
+        with self.lock:
+            self.busy = True
         
-        messages = [
-            {"role": "system", "content": f"Sen yardımcı bir yapay zeka asistanısın. {prompt_suffix}"}
-        ]
-        
-        if self.web_search_enabled:
-            messages[0]["content"] += " Web araması yaparak en güncel bilgileri kullanabilirsin."
-        
-        if self.reason_enabled:
-            messages[0]["content"] += " Cevaplarında mantıksal çıkarımlar ve nedensellik ilişkileri kurabilirsin."
-        
-        messages.append({"role": "user", "content": message})
-        
-        def generate_response(response_queue):
+        def request_thread():
             try:
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=1000
-                )
+                url = "https://api.openai.com/v1/chat/completions"
                 
-                assistant_response = response.choices[0].message['content']
-                response_queue.put(assistant_response)
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}"
+                }
                 
-                if callback:
-                    callback(assistant_response)
+                data = {
+                    "model": self.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Sen DinamikChat yapay zeka asistanısın. Kullanıcılara Türkçe dilinde yardımcı oluyorsun."
+                        },
+                        {
+                            "role": "user",
+                            "content": user_input
+                        }
+                    ],
+                    "temperature": self.temperature,
+                    "max_tokens": self.max_tokens
+                }
+                
+                response = requests.post(url, headers=headers, json=data)
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    
+                    if "choices" in response_data and len(response_data["choices"]) > 0:
+                        assistant_response = response_data["choices"][0]["message"]["content"]
+                        
+                        if callback:
+                            callback(assistant_response)
+                        else:
+                            self.response_received.emit(assistant_response)
+                    else:
+                        error_message = "API yanıt döndürdü ancak cevap bulunamadı."
+                        if callback:
+                            callback(error_message)
+                        else:
+                            self.response_received.emit(error_message)
+                else:
+                    error_message = f"API hatası (Kod: {response.status_code}): {response.text}"
+                    
+                    if callback:
+                        callback(error_message)
+                    else:
+                        self.response_received.emit(error_message)
+            
             except Exception as e:
-                error_message = f"OpenAI API hatası: {str(e)}"
-                response_queue.put(error_message)
+                error_message = f"İstek hatası: {str(e)}"
                 
                 if callback:
                     callback(error_message)
+                else:
+                    self.response_received.emit(error_message)
+            
+            finally:
+                with self.lock:
+                    self.busy = False
         
-        response_queue = Queue()
-        thread = threading.Thread(target=generate_response, args=(response_queue,))
+        thread = threading.Thread(target=request_thread)
         thread.daemon = True
         thread.start()
+        
+        return True
 
-        if callback is None:
-            return response_queue.get()
+    def is_busy(self):
+        with self.lock:
+            return self.busy
 
-chatgpt_manager = ChatGPTManager() 
+chatgpt_manager = OpenAIChatManager() 

@@ -1,332 +1,276 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit, QPushButton, QScrollArea, QLabel, QFrame, QSizePolicy
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QDateTime
-from PyQt6.QtGui import QIcon, QFont, QColor
-import speech_recognition as sr
-import threading
-import markdown
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QScrollArea, QFrame, QHBoxLayout, QTextEdit, QSizePolicy
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve, QEvent, QRect
+from PyQt6.QtGui import QIcon, QFont, QColor, QPalette, QCursor
+import os
 import json
+import datetime
 
 class ChatMessage(QFrame):
-    def __init__(self, is_user, message, timestamp=None, parent=None):
+    def __init__(self, text, is_user=True, parent=None):
         super().__init__(parent)
         self.is_user = is_user
-        self.message = message
-        self.timestamp = timestamp or QDateTime.currentDateTime()
-        
-        self.setObjectName("userMessage" if is_user else "aiMessage")
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFrameShadow(QFrame.Shadow.Raised)
-        
+        self.text = text
         self.init_ui()
     
     def init_ui(self):
+        self.setObjectName("chatMessage")
+        
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        
+        message_container = QFrame()
+        message_container.setObjectName("userMessage" if self.is_user else "aiMessage")
+        
+        container_layout = QVBoxLayout(message_container)
+        container_layout.setContentsMargins(12, 10, 12, 10)
+        container_layout.setSpacing(5)
         
         header_layout = QHBoxLayout()
-
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(5)
+        
         icon_label = QLabel()
-        icon_label.setObjectName("messageIcon")
-        icon_label.setText("👤" if self.is_user else "🤖")
-        icon_label.setFont(QFont("Arial", 10))
-
-        name_label = QLabel("Sen" if self.is_user else "DinamikChat")
-        name_label.setObjectName("messageName")
-        name_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-
-        time_str = self.timestamp.toString("hh:mm")
-        time_label = QLabel(time_str)
+        if self.is_user:
+            icon_label.setText("👤")
+        else:
+            icon_label.setText("🤖")
+        icon_label.setFixedWidth(20)
+        
+        sender_label = QLabel("Siz" if self.is_user else "AI")
+        sender_label.setObjectName("messageSender")
+        sender_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        
+        time_label = QLabel(datetime.datetime.now().strftime("%H:%M"))
         time_label.setObjectName("messageTime")
         time_label.setFont(QFont("Arial", 8))
-
-        copy_button = QPushButton("📋")
-        copy_button.setObjectName("copyButton")
-        copy_button.setFixedSize(20, 20)
-        copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        copy_button.clicked.connect(self.copy_message)
+        time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         header_layout.addWidget(icon_label)
-        header_layout.addWidget(name_label)
-        header_layout.addStretch()
+        header_layout.addWidget(sender_label)
+        header_layout.addStretch(1)
         header_layout.addWidget(time_label)
-        header_layout.addWidget(copy_button)
-
-        message_label = QTextEdit()
-        message_label.setObjectName("messageContent")
-        message_label.setReadOnly(True)
-
-        html_content = markdown.markdown(self.message)
-        message_label.setHtml(html_content)
-
-        message_label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        message_label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        doc_height = message_label.document().size().height()
-        message_label.setMinimumHeight(min(doc_height + 10, 300))
         
-        layout.addLayout(header_layout)
-        layout.addWidget(message_label)
-    
-    def copy_message(self):
-        from PyQt6.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.message)
+        content_label = QLabel(self.text)
+        content_label.setObjectName("messageContent")
+        content_label.setFont(QFont("Arial", 10))
+        content_label.setWordWrap(True)
+        content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        content_label.setTextFormat(Qt.TextFormat.PlainText)
+        
+        container_layout.addLayout(header_layout)
+        container_layout.addWidget(content_label)
+        
+        if self.is_user:
+            layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        else:
+            layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        
+        layout.addWidget(message_container)
+        
+        self.initial_opacity = 0.0
+        self.setStyleSheet(f"opacity: {self.initial_opacity};")
+        self.animation = QPropertyAnimation(self, b"windowOpacity")
+        self.animation.setStartValue(self.initial_opacity)
+        self.animation.setEndValue(1.0)
+        self.animation.setDuration(150)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        QTimer.singleShot(10, self.animation.start)
 
 class ChatPanel(QWidget):
     send_message = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        with open('settings.json', 'r', encoding='utf-8') as f:
-            self.settings = json.load(f)
-        
-        self.theme = self.settings['ui']['theme']['dark']
-        
+        self.theme = {}
         self.init_ui()
-    
+        
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-
+        main_layout.setSpacing(0)
+        
+        messages_container = QWidget()
+        messages_container.setObjectName("messagesContainer")
+        messages_layout = QVBoxLayout(messages_container)
+        messages_layout.setContentsMargins(15, 15, 15, 15)
+        messages_layout.setSpacing(15)
+        messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
         self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("messagesScrollArea")
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setWidget(messages_container)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         
-        self.messages_container = QWidget()
-        self.messages_layout = QVBoxLayout(self.messages_container)
-        self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.messages_layout.setSpacing(10)
+        input_container = QWidget()
+        input_container.setObjectName("inputContainer")
+        input_container.setMinimumHeight(80)
+        input_container.setMaximumHeight(150)
         
-        self.scroll_area.setWidget(self.messages_container)
-
-        input_frame = QFrame()
-        input_frame.setObjectName("inputFrame")
-        input_layout = QHBoxLayout(input_frame)
+        input_layout = QHBoxLayout(input_container)
+        input_layout.setContentsMargins(15, 10, 15, 10)
+        input_layout.setSpacing(10)
         
         self.message_input = QTextEdit()
         self.message_input.setObjectName("messageInput")
-        self.message_input.setPlaceholderText("Bir mesaj yazın...")
-        self.message_input.setMinimumHeight(50)
-        self.message_input.setMaximumHeight(100)
+        self.message_input.setMinimumHeight(60)
+        self.message_input.setPlaceholderText("Mesajınızı buraya yazın...")
+        self.message_input.installEventFilter(self)
         
-        send_button = QPushButton()
-        send_button.setObjectName("sendButton")
-        send_button.setIcon(QIcon("assets/icons/send.svg"))
-        send_button.setFixedSize(40, 40)
-        send_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        send_button.clicked.connect(self.send_user_message)
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(5)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        mic_button = QPushButton()
-        mic_button.setObjectName("micButton")
-        mic_button.setIcon(QIcon("assets/icons/mic.svg"))
-        mic_button.setFixedSize(40, 40)
-        mic_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        mic_button.clicked.connect(self.start_voice_input)
+        self.mic_button = QPushButton()
+        self.mic_button.setObjectName("micButton")
+        self.mic_button.setIcon(QIcon("assets/icons/mic.svg"))
+        self.mic_button.setIconSize(QSize(18, 18))
+        self.mic_button.setFixedSize(36, 36)
+        self.mic_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.mic_button.setToolTip("Mikrofon (Henüz aktif değil)")
+        
+        self.send_button = QPushButton()
+        self.send_button.setObjectName("sendButton")
+        self.send_button.setIcon(QIcon("assets/icons/send.svg"))
+        self.send_button.setIconSize(QSize(18, 18))
+        self.send_button.setFixedSize(36, 36)
+        self.send_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.send_button.setToolTip("Mesaj Gönder")
+        self.send_button.clicked.connect(self.send_user_message)
+        
+        button_layout.addWidget(self.mic_button)
+        button_layout.addWidget(self.send_button)
         
         input_layout.addWidget(self.message_input)
-        input_layout.addWidget(mic_button)
-        input_layout.addWidget(send_button)
-
+        input_layout.addLayout(button_layout)
+        
         main_layout.addWidget(self.scroll_area, 1)
-        main_layout.addWidget(input_frame)
-
+        main_layout.addWidget(input_container)
+        
+        self.messages_widget = messages_container
+        self.messages_layout = messages_layout
+        
         self.apply_styles()
-
-        self.message_widgets = []
     
     def apply_styles(self):
         self.setStyleSheet("""
-            QScrollArea {
+            #messagesContainer {
+                background-color: #252526;
+            }
+            
+            #messagesScrollArea {
+                background-color: transparent;
                 border: none;
-                background-color: #121212;
+            }
+            
+            #inputContainer {
+                background-color: #1E1E1E;
+                border-top: 1px solid #3E3E3E;
+            }
+            
+            #messageInput {
+                background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: 1px solid #555555;
+                border-radius: 8px;
+                padding: 8px 12px;
+                selection-background-color: #1E88E5;
+            }
+            
+            #messageInput:focus {
+                border: 1px solid #1E88E5;
+            }
+            
+            #micButton, #sendButton {
+                background-color: #3A3A3A;
+                border: none;
+                border-radius: 18px;
+                padding: 6px;
+            }
+            
+            #micButton:hover, #sendButton:hover {
+                background-color: #1E88E5;
+            }
+            
+            #micButton:pressed, #sendButton:pressed {
+                background-color: #1976D2;
+            }
+            
+            #chatMessage {
+                margin: 2px 0px;
             }
             
             #userMessage {
-                background-color: #1E3A8A;
-                border-radius: 10px;
-                padding: 10px;
-                margin: 5px 50px 5px 10px;
+                background-color: #3A3A3A;
+                border-radius: 12px;
+                border-top-right-radius: 2px;
+                padding: 2px;
+                max-width: 550px;
             }
             
             #aiMessage {
                 background-color: #2A2A2A;
-                border-radius: 10px;
-                padding: 10px;
-                margin: 5px 10px 5px 50px;
+                border-radius: 12px;
+                border-top-left-radius: 2px;
+                padding: 2px;
+                max-width: 550px;
             }
             
-            #messageIcon {
-                font-size: 16px;
-            }
-            
-            #messageName {
-                color: #E0E0E0;
+            #messageSender {
+                color: #FFFFFF;
                 font-weight: bold;
             }
             
             #messageTime {
-                color: #909090;
-                font-size: 8pt;
+                color: #AAAAAA;
             }
             
             #messageContent {
-                border: none;
-                background-color: transparent;
-                color: #F0F0F0;
-            }
-            
-            #copyButton {
-                background-color: transparent;
-                border: none;
-                color: #909090;
-                font-size: 12px;
-            }
-            
-            #copyButton:hover {
-                color: #E0E0E0;
-            }
-            
-            #inputFrame {
-                background-color: #2A2A2A;
-                border-top: 1px solid #3A3A3A;
-                padding: 10px;
-            }
-            
-            #messageInput {
-                background-color: #363636;
-                border-radius: 10px;
-                padding: 10px;
-                color: #F0F0F0;
-                border: 1px solid #555;
-            }
-            
-            #sendButton, #micButton {
-                background-color: #00AAFF;
-                border-radius: 20px;
-                border: none;
-            }
-            
-            #sendButton:hover, #micButton:hover {
-                background-color: #0088CC;
+                color: #FFFFFF;
+                font-size: 10pt;
+                padding: 5px 2px;
             }
         """)
     
-    def add_message(self, message, is_user=True):
-        chat_message = ChatMessage(is_user, message)
-        self.messages_layout.addWidget(chat_message)
-        self.message_widgets.append(chat_message)
-
-        self.scroll_area.verticalScrollBar().setValue(
-            self.scroll_area.verticalScrollBar().maximum()
-        )
-
-        if is_user:
-            self.send_message.emit(message)
-    
-    def send_user_message(self):
-        message = self.message_input.toPlainText().strip()
-        if message:
-            self.add_message(message, True)
-            self.message_input.clear()
-    
-    def start_voice_input(self):
-        def recognize_speech():
-            recognizer = sr.Recognizer()
-            
-            try:
-                with sr.Microphone() as source:
-                    self.message_input.setPlaceholderText("Dinleniyor...")
-                    recognizer.adjust_for_ambient_noise(source)
-                    audio = recognizer.listen(source, timeout=5)
-                
-                self.message_input.setPlaceholderText("İşleniyor...")
-                try:
-                    text = recognizer.recognize_google(audio, language="tr-TR")
-                    self.message_input.setText(text)
-                except sr.UnknownValueError:
-                    self.message_input.setPlaceholderText("Ses anlaşılamadı, tekrar deneyin...")
-                except sr.RequestError:
-                    self.message_input.setPlaceholderText("Ses tanıma servisi çalışmıyor...")
-            except Exception as e:
-                self.message_input.setPlaceholderText(f"Hata: {str(e)}")
-
-            def reset_placeholder():
-                import time
-                time.sleep(2)
-                self.message_input.setPlaceholderText("Bir mesaj yazın...")
-            
-            threading.Thread(target=reset_placeholder).start()
-
-        threading.Thread(target=recognize_speech).start()
-
-    def get_last_ai_message(self):
-        if not hasattr(self, 'message_widgets') or not self.message_widgets:
-            return None
-
-        for widget in reversed(self.message_widgets):
-            if hasattr(widget, 'is_user') and not widget.is_user:
-                return widget.message
-        
-        return None
-
-    def clear_messages(self):
-        self.messages_layout.clear()
-
     def update_theme(self, theme):
         self.theme = theme
-
-        self.setStyleSheet(f"""
-            QScrollArea {{
-                background-color: {self.theme['background']};
-            }}
-            
-            #userMessage {{
-                background-color: {self.theme['user_message']};
-            }}
-            
-            #aiMessage {{
-                background-color: {self.theme['ai_message']};
-            }}
-            
-            #messageIcon {{
-                color: {self.theme['icon']};
-            }}
-            
-            #messageName {{
-                color: {self.theme['name']};
-            }}
-            
-            #messageTime {{
-                color: {self.theme['time']};
-            }}
-            
-            #messageContent {{
-                color: {self.theme['content']};
-            }}
-            
-            #copyButton {{
-                color: {self.theme['copy_button']};
-            }}
-            
-            #copyButton:hover {{
-                color: {self.theme['copy_button_hover']};
-            }}
-            
-            #inputFrame {{
-                background-color: {self.theme['input_frame']};
-            }}
-            
-            #messageInput {{
-                background-color: {self.theme['input']};
-                color: {self.theme['input_text']};
-                border: 1px solid {self.theme['input_border']};
-            }}
-            
-            #sendButton, #micButton {{
-                background-color: {self.theme['button']};
-            }}
-            
-            #sendButton:hover, #micButton:hover {{
-                background-color: {self.theme['button_hover']};
-            }}
-        """) 
+        self.apply_styles()
+    
+    def add_user_message(self, text):
+        message = ChatMessage(text, is_user=True)
+        self.messages_layout.addWidget(message)
+        QTimer.singleShot(100, self.scroll_to_bottom)
+        return message
+    
+    def add_ai_message(self, text):
+        message = ChatMessage(text, is_user=False)
+        self.messages_layout.addWidget(message)
+        QTimer.singleShot(100, self.scroll_to_bottom)
+        return message
+    
+    def send_user_message(self):
+        text = self.message_input.toPlainText().strip()
+        if text:
+            self.send_message.emit(text)
+            self.message_input.clear()
+    
+    def clear_messages(self):
+        while self.messages_layout.count():
+            item = self.messages_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+    
+    def scroll_to_bottom(self):
+        self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
+    
+    def eventFilter(self, obj, event):
+        if obj == self.message_input and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Return and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                self.send_user_message()
+                return True
+        return super().eventFilter(obj, event) 
