@@ -559,11 +559,8 @@ class ConversationPanel(QWidget):
             if conv:
                 conv.name = new_name
                 session.commit()
-                
-                # Butonları güncelle
+
                 self.load_conversations()
-                
-                # Aynı sohbet seçili kalsın
                 self.select_conversation(conv)
             
             session.close()
@@ -590,21 +587,16 @@ class ConversationPanel(QWidget):
                 session.commit()
                 
                 is_selected = (self.selected_conversation == conversation)
-                
-                # Butonları güncelle
                 self.load_conversations()
-                
-                # Seçili sohbet silindiyse ve başka sohbet varsa ilkini seç
+
                 if is_selected and self.buttons:
                     self.conversation_clicked(self.buttons[0].conversation)
                 elif is_selected:
-                    # Hiç sohbet kalmadıysa sinyali boş olarak gönder
                     self.conversation_selected.emit(None)
             
             session.close()
     
     def share_conversation(self, conversation):
-        # Paylaşım özelliği (henüz uygulanmadı)
         from PyQt6.QtWidgets import QMessageBox
         
         QMessageBox.information(

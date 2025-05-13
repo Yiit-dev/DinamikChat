@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QFrame, QLabel
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, QRect
 from PyQt6.QtGui import QColor, QPainter, QPen, QLinearGradient, QBrush, QRadialGradient, QImage, QPixmap, QFont
 import math
 import numpy as np
@@ -315,11 +315,9 @@ class ModelViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Orta katman - DNA hologram animasyonu
         self.dna_hologram = DNAHologram(self)
         self.dna_hologram.setGeometry(0, 0, self.width(), self.height())
-        
-        # Önplan - Yapay zeka modeli yazısı için merkezi alan
+
         self.central_widget = QWidget()
         self.central_widget.setObjectName("centralWidget")
         self.central_widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -327,8 +325,7 @@ class ModelViewer(QWidget):
         central_layout = QVBoxLayout(self.central_widget)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Ana başlık
+
         self.title_frame = QFrame()
         self.title_frame.setObjectName("titleFrame")
         title_layout = QVBoxLayout(self.title_frame)
@@ -344,16 +341,13 @@ class ModelViewer(QWidget):
         
         title_layout.addWidget(self.ai_title)
         title_layout.addWidget(self.model_title)
-        
-        # Ana düzene başlık çerçevesini ekle
+
         central_layout.addWidget(self.title_frame, 0, Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(self.central_widget)
-        
-        # Başlangıç animasyonu için zamanlayıcı
+
         QTimer.singleShot(500, self.start_animation)
-        
-        # Stil uygulaması
+
         self.setStyleSheet("""
             ModelViewer {
                 background-color: transparent;
@@ -392,7 +386,6 @@ class ModelViewer(QWidget):
         """)
     
     def start_animation(self):
-        # Başlık animasyonu
         title_anim = QPropertyAnimation(self.title_frame, b"geometry")
         title_anim.setDuration(1000)
         title_anim.setStartValue(self.title_frame.geometry().adjusted(0, -50, 0, -50))
@@ -402,12 +395,10 @@ class ModelViewer(QWidget):
     
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # DNA hologramı tam ekran yap
         if hasattr(self, 'dna_hologram'):
             self.dna_hologram.setGeometry(0, 0, self.width(), self.height())
     
     def paintEvent(self, event):
-        # Arka plan gradyanı çiz
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
