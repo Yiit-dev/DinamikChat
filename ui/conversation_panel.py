@@ -457,8 +457,7 @@ class ConversationPanel(QWidget):
         session.commit()
         
         button = self.add_conversation_button(new_conversation)
-        
-        # Animasyon ile vurgula
+
         animation = QPropertyAnimation(button, b"maximumHeight")
         animation.setDuration(300)
         animation.setStartValue(0)
@@ -470,7 +469,6 @@ class ConversationPanel(QWidget):
         return new_conversation
     
     def rename_conversation(self, conversation):
-        # Yeniden adlandırma diyaloğu
         dialog = QDialog(self)
         dialog.setWindowTitle("Sohbeti Yeniden Adlandır")
         dialog.setFixedSize(400, 150)
