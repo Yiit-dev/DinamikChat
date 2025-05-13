@@ -23,28 +23,24 @@ class ConversationButton(QPushButton):
         layout.setContentsMargins(15, 8, 10, 8)
         layout.setSpacing(10)
         
-        # Kanal ikonu
         self.icon_label = QLabel()
         self.icon_label.setObjectName("channelIcon")
         self.icon_label.setFixedSize(32, 32)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Kanal adının ilk harfini al
+
         first_letter = self.conversation.name[0].upper()
         self.icon_label.setText(first_letter)
-        
-        # Kanal içeriği
+
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(4)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
-        # Kanal adı
+ 
         title_label = QLabel(self.conversation.name)
         title_label.setObjectName("channelTitle")
         title_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-        
-        # Tarih/saat
+
         date_str = "Bugün" if datetime.date.today() == self.conversation.created_at.date() else self.conversation.created_at.strftime("%d/%m/%Y")
         date_label = QLabel(date_str)
         date_label.setObjectName("channelDate")
@@ -52,8 +48,7 @@ class ConversationButton(QPushButton):
         
         content_layout.addWidget(title_label)
         content_layout.addWidget(date_label)
-        
-        # İşlem butonları
+
         actions_container = QWidget()
         actions_container.setFixedWidth(90)
         actions_container.setObjectName("actionButtonsContainer")
@@ -61,8 +56,7 @@ class ConversationButton(QPushButton):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(6)
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        
-        # Yeniden adlandırma butonu
+
         self.rename_btn = QPushButton()
         self.rename_btn.setObjectName("actionButton")
         self.rename_btn.setIcon(QIcon("assets/icons/edit_icon.png"))
@@ -71,8 +65,7 @@ class ConversationButton(QPushButton):
         self.rename_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.rename_btn.setToolTip("Yeniden Adlandır")
         self.rename_btn.setProperty("action", "rename")
-        
-        # Arşivleme butonu
+
         self.archive_btn = QPushButton()
         self.archive_btn.setObjectName("actionButton")
         self.archive_btn.setIcon(QIcon("assets/icons/archive_icon.png"))
@@ -81,8 +74,7 @@ class ConversationButton(QPushButton):
         self.archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.archive_btn.setToolTip("Arşivle")
         self.archive_btn.setProperty("action", "archive")
-        
-        # Silme butonu
+
         self.delete_btn = QPushButton()
         self.delete_btn.setObjectName("actionButton")
         self.delete_btn.setIcon(QIcon("assets/icons/delete_icon.png"))
@@ -129,7 +121,6 @@ class ConversationPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Kanal listesi için üst konteyner
         header_container = QWidget()
         header_container.setFixedHeight(40)
         header_container.setObjectName("headerContainer")
@@ -153,8 +144,7 @@ class ConversationPanel(QWidget):
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         header_layout.addWidget(add_btn)
-        
-        # Kanal listesi için kapsayıcı
+
         scrollArea = QScrollArea()
         scrollArea.setWidgetResizable(True)
         scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -175,12 +165,10 @@ class ConversationPanel(QWidget):
         self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         scrollArea.setWidget(self.content_widget)
-        
-        # Düzene widget'ları ekle
+
         layout.addWidget(header_container)
         layout.addWidget(scrollArea, 1)
-        
-        # Stil uygula
+
         self.setStyleSheet("""
             #conversationContainer {
                 background-color: transparent;
@@ -290,8 +278,6 @@ class ConversationPanel(QWidget):
     def add_conversation_button(self, conversation):
         button = ConversationButton(conversation)
         button.clicked.connect(lambda checked, c=conversation: self.conversation_clicked(c))
-        
-        # Buton aksiyonlarını bağla
         button.rename_btn.clicked.connect(lambda: self.rename_conversation(conversation))
         button.archive_btn.clicked.connect(lambda: self.archive_conversation(conversation))
         button.delete_btn.clicked.connect(lambda: self.delete_conversation(conversation))
@@ -332,11 +318,9 @@ class ConversationPanel(QWidget):
             if db_conversation:
                 db_conversation.is_archived = True
                 session.commit()
-                
-                # UI güncellemesi
+
                 self.load_conversations()
-                
-                # Arşivlenen sohbet seçili ise başka bir sohbeti seç
+
                 if self.selected_conversation and self.selected_conversation.conversation_id == conversation.conversation_id:
                     remaining_conversations = session.query(Conversation).filter_by(
                         user_id=self.user.user_id, 
