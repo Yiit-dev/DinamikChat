@@ -415,16 +415,23 @@ class LoginWindow(QMainWindow):
         with open('settings.json', 'r', encoding='utf-8') as f:
             self.settings = json.load(f)
         
-        self.current_theme_name = 'dark'
-        self.theme = self.settings['ui']['theme']['dark']
         self.app_name = self.settings['app_name']
+        self.is_dark_theme = True
+        self.theme = self.settings['ui']['theme']['dark']
+        self.pending_verification_user = None
         
         self.setWindowTitle(self.app_name)
-        self.setMinimumSize(900, 600)
+        self.resize(800, 600)
+        self.setMinimumSize(800, 600)
         
         self.setWindowIcon(QIcon("assets/icons/app_icon.svg"))
         
         self.init_ui()
+        self.apply_styles()
+        
+        self.login_successful.connect(self.on_login_successful)
+        
+        self.start_intro_animation()
     
     def init_ui(self):
         central_widget = QWidget()
@@ -462,9 +469,9 @@ class LoginWindow(QMainWindow):
         form_frame.setObjectName("formFrame")
         form_layout = QVBoxLayout(form_frame)
         
-        self.login_username = QLineEdit()
-        self.login_username.setPlaceholderText("Kullanıcı Adı veya E-posta")
-        self.login_username.setMinimumHeight(40)
+        self.login_email_input = QLineEdit()
+        self.login_email_input.setPlaceholderText("Kullanıcı Adı veya E-posta")
+        self.login_email_input.setMinimumHeight(40)
         
         self.password_toggle_style = """
             QPushButton {
@@ -495,10 +502,10 @@ class LoginWindow(QMainWindow):
         password_layout.setContentsMargins(0, 0, 0, 0)
         password_layout.setSpacing(0)
         
-        self.login_password = QLineEdit()
-        self.login_password.setPlaceholderText("Parola")
-        self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.login_password.setMinimumHeight(40)
+        self.login_password_input = QLineEdit()
+        self.login_password_input.setPlaceholderText("Parola")
+        self.login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.login_password_input.setMinimumHeight(40)
         
         self.login_password_toggle = QPushButton()
         self.login_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
@@ -507,7 +514,7 @@ class LoginWindow(QMainWindow):
         self.login_password_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.login_password_toggle.clicked.connect(self.toggle_login_password_visibility)
         
-        password_layout.addWidget(self.login_password)
+        password_layout.addWidget(self.login_password_input)
         password_layout.addWidget(self.login_password_toggle)
         
         login_button = QPushButton("Giriş Yap")
@@ -525,7 +532,7 @@ class LoginWindow(QMainWindow):
         register_button.setCursor(Qt.CursorShape.PointingHandCursor)
         register_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
         
-        form_layout.addWidget(self.login_username)
+        form_layout.addWidget(self.login_email_input)
         form_layout.addWidget(password_container)
         form_layout.addWidget(login_button)
         form_layout.addWidget(forgot_password_button, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -760,10 +767,6 @@ class LoginWindow(QMainWindow):
         main_layout.addWidget(self.wave_animation, alignment=Qt.AlignmentFlag.AlignBottom)
         
         self.setCentralWidget(central_widget)
-        
-        self.apply_styles()
-        
-        QTimer.singleShot(300, self.start_intro_animation)
     
     def start_intro_animation(self):
         animation = QPropertyAnimation(self.stacked_widget, b"geometry")
@@ -783,11 +786,11 @@ class LoginWindow(QMainWindow):
         animation.start()
     
     def toggle_theme(self):
-        if self.current_theme_name == 'dark':
-            self.current_theme_name = 'light'
+        if self.is_dark_theme:
+            self.is_dark_theme = False
             self.theme = self.settings['ui']['theme']['light']
         else:
-            self.current_theme_name = 'dark'
+            self.is_dark_theme = True
             self.theme = self.settings['ui']['theme']['dark']
         
         self.update_theme_button_icon()
@@ -795,7 +798,7 @@ class LoginWindow(QMainWindow):
         self.apply_styles()
     
     def update_theme_button_icon(self):
-        if self.current_theme_name == 'dark':
+        if self.is_dark_theme:
             self.theme_button.setToolTip("Açık Tema")
             self.theme_button.setText("☀️")
         else:
@@ -873,46 +876,37 @@ class LoginWindow(QMainWindow):
         """)
     
     def handle_login(self):
-        username_or_email = self.login_username.text().strip()
-        password = self.login_password.text()
-        
-        if not username_or_email or not password:
-            QMessageBox.warning(self, "Hata", "Kullanıcı adı/e-posta ve parola gereklidir.")
+        email_or_username = self.login_email_input.text().strip()
+        password = self.login_password_input.text()
+        if not email_or_username or not password:
+            QMessageBox.warning(self, "Hata", "Kullanıcı adı/e-posta ve şifre gereklidir.")
             return
-        
-        session = get_db_session()
-        
         try:
-            user = session.query(User).filter(
-                (User.username == username_or_email) | (User.email == username_or_email)
-            ).first()
+            session = get_db_session()
+            user = session.query(User).filter((User.email == email_or_username) | (User.username == email_or_username)).first()
             
             if not user:
-                QMessageBox.warning(self, "Hata", "Kullanıcı adı veya parola yanlış.")
+                QMessageBox.warning(self, "Hata", "Kullanıcı bulunamadı.")
+                session.close()
                 return
             
-            if not user.verify_password(password):
-                QMessageBox.warning(self, "Hata", "Kullanıcı adı veya parola yanlış.")
+            if user.password != password:
+                QMessageBox.warning(self, "Hata", "Hatalı şifre.")
+                session.close()
                 return
             
-            if not user.is_verified:
-                QMessageBox.warning(self, "Doğrulama Gerekli", "Hesabınızı kullanmadan önce e-posta adresinizi doğrulamanız gerekiyor.")
-                code = email_manager.generate_verification_code(user.email)
-                email_manager.send_verification_email(user.email, code)
-                self.pending_verification_user = user
-                self.stacked_widget.setCurrentIndex(3)
-                return
-            
+            if hasattr(user, 'is_verified') and not user.is_verified:
+                 QMessageBox.warning(self, "Hata", "Hesabınız doğrulanmadı. Lütfen e-posta adresinize gönderilen doğrulama kodunu girin.")
+                 self.pending_verification_user = user
+                 self.stacked_widget.setCurrentIndex(3)
+                 session.close()
+                 return
+
             self.login_successful.emit(user)
-            
-            from ui.main_window import MainWindow
-            self.main_window = MainWindow(user)
-            self.main_window.show()
-            self.hide()
+            session.close()
             
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Giriş sırasında bir hata oluştu: {str(e)}")
-        finally:
+            QMessageBox.critical(self, "Hata", f"Giriş yapılırken bir hata oluştu: {str(e)}")
             session.close()
     
     def handle_register(self):
@@ -925,17 +919,16 @@ class LoginWindow(QMainWindow):
         if not username or not email or not password or not first_name or not last_name:
             QMessageBox.warning(self, "Hata", "Tüm alanlar zorunludur.")
             return
-        
+            
         if len(password) < 8:
             QMessageBox.warning(self, "Hata", "Parola en az 8 karakter olmalıdır.")
             return
-        
+            
         if not validators.email(email):
             QMessageBox.warning(self, "Hata", "Geçerli bir e-posta adresi girin.")
             return
-        
+            
         session = get_db_session()
-        
         try:
             existing_user = session.query(User).filter(
                 (User.username == username) | (User.email == email)
@@ -946,12 +939,13 @@ class LoginWindow(QMainWindow):
                     QMessageBox.warning(self, "Hata", "Bu kullanıcı adı zaten kullanılıyor.")
                 else:
                     QMessageBox.warning(self, "Hata", "Bu e-posta adresi zaten kullanılıyor.")
+                session.close()
                 return
-            
+                
             new_user = User(
                 user_id=User.generate_user_id(),
                 username=username,
-                password=User.hash_password(password),
+                password=password,
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
@@ -961,19 +955,16 @@ class LoginWindow(QMainWindow):
             
             session.add(new_user)
             session.commit()
-            
-            code = email_manager.generate_verification_code(email)
-            email_manager.send_verification_email(email, code)
+            session.close()
             
             self.pending_verification_user = new_user
-            
+            QMessageBox.information(self, "Kayıt Başarılı", "Hesabınız oluşturuldu. Lütfen e-posta adresinize gönderilen doğrulama kodunu girin.")
             self.stacked_widget.setCurrentIndex(3)
             
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Hata", f"Kayıt sırasında bir hata oluştu: {str(e)}")
-        finally:
             session.close()
+            QMessageBox.critical(self, "Hata", f"Kayıt sırasında bir hata oluştu: {str(e)}")
     
     def verify_account(self):
         code = self.verification_code_register.text().strip()
@@ -987,30 +978,29 @@ class LoginWindow(QMainWindow):
             QMessageBox.warning(self, "Doğrulama Hatası", "Lütfen doğrulama kodunu girin.")
             return
         
-        user_email = self.pending_verification_user.get("email") if isinstance(self.pending_verification_user, dict) else self.pending_verification_user.email
-        
-        if email_manager.verify_code(user_email, code):
-            session = get_db_session()
-            try:
-                user = session.query(User).filter(User.user_id == self.pending_verification_user.user_id).first()
-                
-                if user and user.verification_code == code:
-                    user.is_verified = True
-                    user.verification_code = None
-                    session.commit()
-                    
-                    QMessageBox.information(self, "Başarılı", "Hesabınız başarıyla doğrulandı. Şimdi giriş yapabilirsiniz.")
-                    self.stacked_widget.setCurrentIndex(0)
-                    self.login_username.setText(user.username)
-                    self.login_password.setText("")
-                    self.login_password.setFocus()
-                else:
-                    QMessageBox.warning(self, "Doğrulama Hatası", "Doğrulama kodu hatalı.")
-            except Exception as e:
-                session.rollback()
-                QMessageBox.critical(self, "Hata", f"Doğrulama sırasında bir hata oluştu: {str(e)}")
-            finally:
+        session = get_db_session()
+        try:
+            user = session.query(User).filter(User.user_id == self.pending_verification_user.user_id).first()
+            
+            if user and hasattr(user, 'verification_code') and user.verification_code == code:
+                user.is_verified = True
+                user.verification_code = None
+                session.commit()
                 session.close()
+                
+                QMessageBox.information(self, "Başarılı", "Hesabınız başarıyla doğrulandı. Şimdi giriş yapabilirsiniz.")
+                self.stacked_widget.setCurrentIndex(0)
+                self.login_email_input.setText(user.username)
+                self.login_password_input.setText("")
+                self.login_password_input.setFocus()
+            else:
+                session.close()
+                QMessageBox.warning(self, "Doğrulama Hatası", "Doğrulama kodu hatalı veya süresi dolmuş.")
+                
+        except Exception as e:
+            session.rollback()
+            session.close()
+            QMessageBox.critical(self, "Hata", f"Doğrulama sırasında bir hata oluştu: {str(e)}")
     
     def send_reset_code(self):
         email = self.forgot_email.text().strip()
@@ -1056,57 +1046,57 @@ class LoginWindow(QMainWindow):
         if not email or not code or not new_password or not confirm_password:
             QMessageBox.warning(self, "Hata", "Tüm alanlar zorunludur.")
             return
-        
+            
         if new_password != confirm_password:
             QMessageBox.warning(self, "Hata", "Parolalar eşleşmiyor.")
             return
-        
+            
         if len(new_password) < 8:
             QMessageBox.warning(self, "Hata", "Parola en az 8 karakter olmalıdır.")
             return
-        
-        if not email_manager.verify_code(email, code):
-            QMessageBox.warning(self, "Hata", "Doğrulama kodu geçersiz veya süresi dolmuş.")
-            return
-        
+
         session = get_db_session()
-        
         try:
             user = session.query(User).filter_by(email=email).first()
             
             if not user:
                 QMessageBox.warning(self, "Hata", "Kullanıcı bulunamadı.")
+                session.close()
                 return
+                
+            if not hasattr(user, 'verification_code') or user.verification_code != code:
+                 QMessageBox.warning(self, "Hata", "Doğrulama kodu geçersiz veya süresi dolmuş.")
+                 session.close()
+                 return
+
+            user.password = new_password
+            user.verification_code = None
             
-            user.password = User.hash_password(new_password)
             session.commit()
+            session.close()
             
             QMessageBox.information(self, "Başarılı", "Parolanız başarıyla sıfırlandı. Şimdi giriş yapabilirsiniz.")
             
             self.verification_code.setVisible(False)
             self.new_password.setVisible(False)
             self.confirm_password.setVisible(False)
-            self.reset_password_button.setVisible(False)
-            
             self.forgot_email.clear()
             self.verification_code.clear()
             self.new_password.clear()
             self.confirm_password.clear()
-            
             self.stacked_widget.setCurrentIndex(0)
-            
+
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Hata", f"Şifre sıfırlama sırasında bir hata oluştu: {str(e)}")
-        finally:
             session.close()
+            QMessageBox.critical(self, "Hata", f"Şifre sıfırlama sırasında bir hata oluştu: {str(e)}")
     
     def toggle_login_password_visibility(self):
-        if self.login_password.echoMode() == QLineEdit.EchoMode.Password:
-            self.login_password.setEchoMode(QLineEdit.EchoMode.Normal)
+        if self.login_password_input.echoMode() == QLineEdit.EchoMode.Password:
+            self.login_password_input.setEchoMode(QLineEdit.EchoMode.Normal)
             self.login_password_toggle.setIcon(QIcon("assets/icons/eye.svg"))
         else:
-            self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
+            self.login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
             self.login_password_toggle.setIcon(QIcon("assets/icons/eye-slash.svg"))
     
     def toggle_register_password_visibility(self):
@@ -1183,4 +1173,10 @@ class LoginWindow(QMainWindow):
             email_manager.send_verification_email(user_email, user_name)
             QMessageBox.information(self, "Bilgi", f"Doğrulama kodu {user_email} adresine tekrar gönderildi.")
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Kod gönderimi sırasında bir hata oluştu: {str(e)}") 
+            QMessageBox.critical(self, "Hata", f"Kod gönderimi sırasında bir hata oluştu: {str(e)}")
+
+    def on_login_successful(self, user):
+        from ui.main_window import MainWindow
+        self.main_window = MainWindow(user)
+        self.main_window.show()
+        self.hide() 

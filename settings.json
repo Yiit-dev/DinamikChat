@@ -1,6 +1,10 @@
 {
     "app_name": "DinamikChat",
     "version": "1.0.0",
+    "admin_default": {
+        "username": "admin",
+        "password": "123"
+    },
     "database": {
         "name": "dinamik_chat.db",
         "tables": {

@@ -115,10 +115,6 @@ class ModelManager(QObject):
         if not self.is_model_loaded:
             return []
         
-        # Bu fonksiyon metne göre ağız animasyonu oluşturur
-        # Gerçek bir uygulamada dudak senkronizasyonu için daha karmaşık bir algoritma kullanılır
-        # Burada basitleştirilmiş bir yaklaşım kullandım
-        
         frames = []
         char_count = len(text)
         

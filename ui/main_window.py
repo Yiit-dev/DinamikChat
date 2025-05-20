@@ -1,14 +1,15 @@
-from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QApplication, QMenu, QMessageBox, QToolButton, QCheckBox, QSplitter, QStackedWidget, QTextEdit, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPoint, QPropertyAnimation, QEasingCurve, QEvent, QByteArray, QRect
-from PyQt6.QtGui import QIcon, QFont, QMovie, QAction, QPixmap, QKeySequence, QShortcut, QColor, QPalette, QPainter, QPainterPath, QPolygon
+from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QApplication, QMenu, QMessageBox, QToolButton, QCheckBox, QSplitter, QStackedWidget, QTextEdit, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect, QProgressBar, QLineEdit, QListWidget, QListWidgetItem, QComboBox
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPoint, QPropertyAnimation, QEasingCurve, QEvent, QByteArray, QRect, QSettings
+from PyQt6.QtGui import QIcon, QFont, QMovie, QAction, QPixmap, QKeySequence, QShortcut, QColor, QPalette, QPainter, QPainterPath, QPolygon, QLinearGradient, QBrush, QPen, QImage, QFontDatabase, QCursor
 
 import json
 import os
 import datetime
+import tempfile
 
 from ui.chat_panel import ChatPanel
 from ui.conversation_panel import ConversationPanel
-from database import User, Message, Conversation, get_db_session
+from database import User, Message, Conversation, get_db_session, Database
 from utils.openai_utils import chatgpt_manager
 
 class PanelCollapseButton(QPushButton):
@@ -143,32 +144,284 @@ class GifPlayer(QLabel):
         self.movie.setScaledSize(QSize(int(self.width() * 0.8), int(self.height() * 0.8)))
         super().resizeEvent(event)
 
+class GradientWaveWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(400, 400)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(50)
+        self.phase = 0
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        rect = self.rect()
+        grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        grad.setColorAt(0, QColor(30, 40, 60))
+        grad.setColorAt(1, QColor(20, 30, 50))
+        painter.fillRect(rect, QBrush(grad))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color1 = QColor(0, 120, 255, 80)
+        color2 = QColor(0, 200, 255, 60)
+        w, h = rect.width(), rect.height()
+        for i in range(3):
+            path = QPainter.Path()
+            amp = 30 + i*10
+            freq = 2 + i
+            phase = self.phase + i*30
+            path.moveTo(0, h//2)
+            for x in range(0, w+1, 5):
+                y = h//2 + amp * (0.5*i+1) * __import__('math').sin((x+phase)/w*3.14*freq)
+                path.lineTo(x, y)
+            painter.setPen(QColor(color1 if i%2==0 else color2))
+            painter.drawPath(path)
+        self.phase += 4
+
+class TemaYoneticisi:
+    def __init__(self):
+        self.ayarlar = QSettings("AiChatApp", "TemaAyarlari")
+        self.temalar = {
+            "acik": {
+                "arka_plan": "#FFFFFF",
+                "panel": "#FFFFFF",
+                "panel_sekonder": "#F8F8F8",
+                "buton": "#F5F5F5",
+                "buton_hover": "#E8E8E8",
+                "buton_pressed": "#D8D8D8",
+                "buton_aktif": "#0078D4",
+                "vurgu": "#0078D4",
+                "vurgu_hover": "#006CBE",
+                "vurgu_pressed": "#0060A8",
+                "metin": "#000000",
+                "metin_ikincil": "#444444",
+                "kenar": "#E0E0E0",
+                "hata": "#D83B01",
+                "basari": "#107C10",
+                "kullanici_mesaj": "#E7F5FF",
+                "yapay_zeka_mesaj": "#F8F8F8",
+                "golge": "rgba(0, 0, 0, 0.05)"
+            },
+            "koyu": {
+                "arka_plan": "#121212",
+                "panel": "#1E1E1E",
+                "panel_sekonder": "#252525",
+                "buton": "#2D2D2D",
+                "buton_hover": "#3E3E3E",
+                "buton_pressed": "#4E4E4E",
+                "buton_aktif": "#60CDFF",
+                "vurgu": "#60CDFF",
+                "vurgu_hover": "#4DBFFF",
+                "vurgu_pressed": "#3AB0FF",
+                "metin": "#FFFFFF",
+                "metin_ikincil": "#AAAAAA",
+                "kenar": "#333333",
+                "hata": "#F85858",
+                "basari": "#6CCB5F",
+                "kullanici_mesaj": "#1F2B3E",
+                "yapay_zeka_mesaj": "#252525",
+                "golge": "rgba(0, 0, 0, 0.3)"
+            }
+        }
+        
+        try:
+            with open("ayarlar.json", "r", encoding="utf-8") as f:
+                ayarlar = json.load(f)
+                varsayilan_tema = ayarlar.get("sistem", {}).get("tema", "koyu")
+                self.aktif_tema = self.ayarlar.value("tema", varsayilan_tema)
+        except Exception:
+            self.aktif_tema = "koyu"
+    
+    def tema_degistir(self, tema_adi):
+        if tema_adi in self.temalar:
+            self.aktif_tema = tema_adi
+            self.ayarlar.setValue("tema", tema_adi)
+            return True
+        return False
+    
+    def renkleri_al(self):
+        return self.temalar[self.aktif_tema]
+    
+    def css_degiskenler(self):
+        renkler = self.renkleri_al()
+        css = f"""
+            * {{
+                font-family: 'Segoe UI', sans-serif;
+            }}
+            
+            #AnaForm {{
+                background-color: {renkler['arka_plan']};
+                color: {renkler['metin']};
+            }}
+            
+            QWidget {{
+                background-color: transparent;
+                color: {renkler['metin']};
+            }}
+            
+            QFrame#icerikAlani {{
+                background-color: {renkler['panel']};
+                border-radius: 12px;
+                border: 1px solid {renkler['kenar']};
+            }}
+            
+            QLineEdit, QTextEdit {{
+                background-color: {renkler['panel_sekonder']};
+                color: {renkler['metin']};
+                border: 1px solid {renkler['kenar']};
+                border-radius: 8px;
+                padding: 8px;
+                selection-background-color: {renkler['vurgu']};
+                selection-color: white;
+            }}
+            
+            QPushButton {{
+                background-color: {renkler['buton']};
+                color: {renkler['metin']};
+                border: 1px solid {renkler['kenar']};
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-weight: 500;
+            }}
+            
+            QPushButton:hover {{
+                background-color: {renkler['buton_hover']};
+            }}
+            
+            QPushButton:pressed {{
+                background-color: {renkler['vurgu']};
+                color: white;
+            }}
+            
+            QPushButton:checked {{
+                background-color: {renkler['vurgu']};
+                color: white;
+                font-weight: bold;
+            }}
+            
+            QToolButton {{
+                background-color: {renkler['buton']};
+                border: 1px solid {renkler['kenar']};
+                border-radius: 8px;
+                padding: 3px;
+            }}
+            
+            QToolButton:hover {{
+                background-color: {renkler['buton_hover']};
+            }}
+            
+            QToolButton:pressed {{
+                background-color: {renkler['vurgu']};
+            }}
+            
+            QScrollArea, QScrollBar {{
+                background-color: transparent;
+                border: none;
+            }}
+            
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 14px;
+                margin: 2px;
+            }}
+            
+            QScrollBar::handle:vertical {{
+                background-color: {renkler['buton']};
+                min-height: 20px;
+                border-radius: 7px;
+                margin: 2px;
+            }}
+            
+            QScrollBar::handle:vertical:hover {{
+                background-color: {renkler['buton_hover']};
+            }}
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background-color: transparent;
+                height: 0px;
+                width: 0px;
+            }}
+            
+            QMenu {{
+                background-color: {renkler['panel']};
+                border: 1px solid {renkler['kenar']};
+                border-radius: 8px;
+                padding: 5px;
+            }}
+            
+            QMenu::item {{
+                background-color: transparent;
+                padding: 6px 25px 6px 20px;
+                border-radius: 4px;
+                margin: 2px;
+            }}
+            
+            QMenu::item:selected {{
+                background-color: {renkler['buton_hover']};
+            }}
+            
+            QMenu::separator {{
+                height: 1px;
+                background-color: {renkler['kenar']};
+                margin: 5px 10px;
+            }}
+            
+            QLabel {{
+                color: {renkler['metin']};
+            }}
+            
+            QMessageBox {{
+                background-color: {renkler['panel']};
+            }}
+            
+            QMessageBox QPushButton {{
+                min-width: 80px;
+                min-height: 30px;
+            }}
+            
+            QSplitter::handle {{
+                background-color: {renkler['kenar']};
+            }}
+            
+            QSplitter::handle:horizontal {{
+                width: 1px;
+            }}
+            
+            QSplitter::handle:vertical {{
+                height: 1px;
+            }}
+            
+            QToolTip {{
+                background-color: {renkler['panel']};
+                color: {renkler['metin']};
+                border: 1px solid {renkler['kenar']};
+                border-radius: 4px;
+                padding: 5px;
+            }}
+        """
+        return css
+
 class MainWindow(QMainWindow):
     def __init__(self, user):
         super().__init__()
-        
         self.user = user
+        self.db = Database()
+        self.tema_yoneticisi = TemaYoneticisi()
+        self.setWindowTitle("DinamikChat")
+        self.setMinimumSize(1200, 800)
+        self.setObjectName("AnaForm")
         
-        with open('settings.json', 'r', encoding='utf-8') as f:
-            self.settings = json.load(f)
-        
-        self.is_dark_theme = True
-        self.current_theme = "dark"
-        self.theme = self.settings['ui']['theme']['dark']
-        self.light_theme = self.settings['ui']['theme']['light']
-        self.app_name = self.settings['app_name']
-        
-        self.setWindowTitle(self.app_name)
-        self.resize(1200, 800)
-        self.setMinimumSize(900, 600)
-        
-        self.current_conversation = None
-        self.create_ui()
-        self.setup_shortcuts()
-        
-        QTimer.singleShot(300, self.initialize_conversation)
+        self.init_ui()
+        self.tema_uygula()
     
-    def create_ui(self):
+    def tema_uygula(self):
+        self.setStyleSheet(self.tema_yoneticisi.css_degiskenler())
+    
+    def tema_degistir(self):
+        yeni_tema = "acik" if self.tema_yoneticisi.aktif_tema == "koyu" else "koyu"
+        if self.tema_yoneticisi.tema_degistir(yeni_tema):
+            self.tema_uygula()
+    
+    def init_ui(self):
         central_widget = QWidget()
         self.main_layout = QVBoxLayout(central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -182,7 +435,7 @@ class MainWindow(QMainWindow):
         content_layout.setSpacing(0)
         
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.content_splitter.setHandleWidth(1)
+        self.content_splitter.setHandleWidth(2)
         self.content_splitter.setChildrenCollapsible(False)
         self.content_splitter.setObjectName("contentSplitter")
         
@@ -192,9 +445,8 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
         
-        self.conversation_panel = ConversationPanel(self.user)
-        self.conversation_panel.conversation_selected.connect(self.load_conversation)
-        
+        self.conversation_panel = ConversationPanel(self, self.tema_yoneticisi)
+        self.conversation_panel.konusma_secildi.connect(self.load_conversation)
         left_layout.addWidget(self.conversation_panel)
         
         self.left_collapse_button = PanelCollapseButton("left")
@@ -206,20 +458,16 @@ class MainWindow(QMainWindow):
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
         
-        center_content = QHBoxLayout()
-        center_content.setContentsMargins(0, 0, 0, 0)
-        center_content.setSpacing(0)
-        
         self.gif_player = GifPlayer()
-        
         model_title = QLabel("Yapay Zeka Modeli")
         model_title.setObjectName("modelTitle")
         model_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         center_panel = QVBoxLayout()
+        center_panel.setContentsMargins(0, 0, 0, 0)
+        center_panel.setSpacing(20)
         center_panel.addWidget(model_title)
-        center_panel.addWidget(self.gif_player)
-        
+        center_panel.addWidget(self.gif_player, alignment=Qt.AlignmentFlag.AlignCenter)
         center_layout.addLayout(center_panel)
         
         self.right_panel = QWidget()
@@ -228,9 +476,9 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         
-        self.chat_panel = ChatPanel()
-        self.chat_panel.send_message.connect(self.handle_user_message)
-        
+        self.chat_panel = ChatPanel(self, self.tema_yoneticisi)
+        self.chat_panel.mesaj_gonderildi.connect(self.handle_user_message)
+        self.chat_panel.ses_kaydi_bitti.connect(self.handle_voice_recording)
         right_layout.addWidget(self.chat_panel)
         
         self.right_collapse_button = PanelCollapseButton("right")
@@ -241,16 +489,10 @@ class MainWindow(QMainWindow):
         self.content_splitter.addWidget(self.right_panel)
         
         content_layout.addWidget(self.content_splitter)
-        
-        self.content_splitter.setSizes([180, 450, 500])
+        self.content_splitter.setSizes([220, 500, 500])
         
         self.main_layout.addWidget(self.content_container)
-        
-        self.apply_styles()
-        
         self.setCentralWidget(central_widget)
-        
-        self.installEventFilter(self)
     
     def create_top_panel(self):
         self.top_panel = QFrame()
@@ -266,30 +508,14 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(12)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         
-        channel_container = QWidget()
-        channel_layout = QHBoxLayout(channel_container)
-        channel_layout.setContentsMargins(0, 0, 0, 0)
-        channel_layout.setSpacing(5)
-        channel_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        
-        self.channels_cb = QCheckBox("Sohbet Kanalları")
-        self.channels_cb.setObjectName("controlCheckbox")
-        self.channels_cb.setChecked(True)
-        self.channels_cb.stateChanged.connect(self.toggle_channels_panel)
-        
         add_channel_btn = QPushButton()
         add_channel_btn.setObjectName("addChannelButton")
-        add_channel_btn.setIcon(QIcon("assets/icons/add_icon.png"))
-        add_channel_btn.setIconSize(QSize(14, 14))
-        add_channel_btn.setFixedSize(24, 24)
+        add_channel_btn.setText("+")
+        add_channel_btn.setFixedSize(40, 40)
         add_channel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_channel_btn.setToolTip("Yeni Kanal Ekle")
         add_channel_btn.clicked.connect(self.create_new_conversation)
-        
-        channel_layout.addWidget(self.channels_cb)
-        channel_layout.addWidget(add_channel_btn)
-        
-        left_layout.addWidget(channel_container)
+        left_layout.addWidget(add_channel_btn)
         
         center_panel = QFrame()
         center_layout = QHBoxLayout(center_panel)
@@ -298,19 +524,22 @@ class MainWindow(QMainWindow):
         center_layout.setSpacing(16)
         
         self.admin_btn = MenuButton("ADMİN")
+        self.admin_btn.setFixedHeight(36)
+        self.admin_btn.setFixedWidth(100)
         self.admin_btn.clicked.connect(self.show_admin_menu)
         
         self.modes_widget = QStackedWidget()
-        
         normal_widget = QWidget()
         normal_layout = QHBoxLayout(normal_widget)
         normal_layout.setContentsMargins(0, 0, 0, 0)
         normal_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.normal_btn = MenuButton("Normal", is_active=True)
+        self.normal_btn.setFixedHeight(36)
+        self.normal_btn.setFixedWidth(100)
         self.normal_btn.clicked.connect(self.show_modes_menu)
-        
         normal_layout.addWidget(self.normal_btn)
+        
         self.modes_widget.addWidget(normal_widget)
         
         center_layout.addWidget(self.admin_btn)
@@ -346,7 +575,7 @@ class MainWindow(QMainWindow):
             sizes[1] += sizes[0]
             sizes[0] = 0
         else:
-            width_to_use = min(180, sizes[1] // 3)
+            width_to_use = min(220, sizes[1] // 3)
             sizes[1] -= width_to_use
             sizes[0] = width_to_use
         
@@ -367,40 +596,8 @@ class MainWindow(QMainWindow):
         
         self.content_splitter.setSizes(sizes)
     
-    def setup_shortcuts(self):
-        self.enter_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Return), self)
-        self.enter_shortcut.activated.connect(self.send_message_shortcut)
-        
-        self.new_chat_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
-        self.new_chat_shortcut.activated.connect(self.create_new_conversation)
-        
-        self.quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
-        self.quit_shortcut.activated.connect(self.close)
-    
-    def send_message_shortcut(self):
-        if self.chat_panel.message_input.hasFocus():
-            self.chat_panel.send_user_message()
-    
-    def eventFilter(self, source, event):
-        if event.type() == QEvent.Type.KeyPress and source == self.chat_panel.message_input:
-            if event.key() == Qt.Key.Key_Return:
-                if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-                    self.chat_panel.message_input.insertPlainText("\n")
-                    return True
-                elif event.modifiers() == Qt.KeyboardModifier.NoModifier:
-                    self.chat_panel.send_user_message()
-                    return True
-        
-        return super().eventFilter(source, event)
-    
-    def create_new_conversation(self):
-        conversation_name = f"Yeni Sohbet {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        new_conversation = self.conversation_panel.create_new_conversation(conversation_name)
-        if new_conversation:
-            self.conversation_panel.select_conversation(new_conversation)
-    
     def show_modes_menu(self):
-        modes_menu = CustomMenu(self, is_dark=self.is_dark_theme)
+        modes_menu = CustomMenu(self, is_dark=self.tema_yoneticisi.aktif_tema == "koyu")
         modes_menu.setObjectName("customMenu")
         modes_menu.setMinimumWidth(200)
         
@@ -431,400 +628,8 @@ class MainWindow(QMainWindow):
         if action:
             self.normal_btn.setText(action.text())
     
-    def apply_styles(self):
-        if self.is_dark_theme:
-            self.apply_dark_theme()
-        else:
-            self.apply_light_theme()
-    
-    def apply_dark_theme(self):
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #1E1E1E;
-                color: #FFFFFF;
-            }
-            
-            #topPanel {
-                background-color: #252526;
-                border-bottom: 1px solid #3E3E3E;
-            }
-            
-            #controlCheckbox {
-                color: #FFFFFF;
-                spacing: 5px;
-                padding: 3px;
-                min-height: 40px;
-                font-weight: bold;
-            }
-            
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 3px;
-                border: 1px solid #555555;
-            }
-            
-            QCheckBox::indicator:unchecked {
-                background-color: #3A3A3A;
-            }
-            
-            QCheckBox::indicator:checked {
-                background-color: #1E88E5;
-                border: 1px solid #1E88E5;
-            }
-            
-            #addChannelButton {
-                background-color: #3A3A3A;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 12px;
-                padding: 2px;
-            }
-            
-            #addChannelButton:hover {
-                background-color: #1E88E5;
-            }
-            
-            #addChannelButton:pressed {
-                background-color: #1976D2;
-            }
-            
-            #menuButton {
-                background-color: #3A3A3A;
-                color: #FFFFFF;
-                border: 1px solid #555555;
-                border-radius: 15px;
-                min-width: 150px;
-                min-height: 36px;
-                padding: 5px 15px;
-                font-weight: bold;
-                text-align: center;
-            }
-            
-            #menuButton:hover {
-                background-color: #4E4E4E;
-            }
-            
-            #menuButton:pressed {
-                background-color: #383838;
-            }
-            
-            #activeMenuButton {
-                background-color: #3A3A3A;
-                color: #FFFFFF;
-                border: 1px solid #555555;
-                border-radius: 15px;
-                min-width: 150px;
-                min-height: 36px;
-                padding: 5px 15px;
-                font-weight: bold;
-                text-align: center;
-            }
-            
-            #contentSplitter {
-                background-color: #1E1E1E;
-            }
-            
-            QSplitter::handle {
-                background-color: #3E3E3E;
-            }
-            
-            #leftPanel {
-                background-color: #252526;
-                border-right: 1px solid #3E3E3E;
-            }
-            
-            #centerArea {
-                background-color: #252526;
-                border-right: 1px solid #3E3E3E;
-            }
-            
-            #rightPanel {
-                background-color: #252526;
-            }
-            
-            #gifPlayer {
-                background-color: #1E1E1E;
-                border-radius: 10px;
-                margin: 10px;
-            }
-            
-            #customMenu {
-                background-color: transparent;
-                border: none;
-                padding: 8px;
-            }
-            
-            #customMenu::item {
-                background-color: transparent;
-                color: #FFFFFF;
-                padding: 8px 20px;
-                border-radius: 8px;
-                margin: 2px 5px;
-                font-weight: bold;
-            }
-            
-            #customMenu::item:selected {
-                background-color: #1E88E5;
-            }
-            
-            #customMenu::item:checked {
-                background-color: #1976D2;
-            }
-            
-            #collapseButton {
-                background-color: transparent;
-                border: none;
-            }
-            
-            #modelTitle {
-                color: #AAAAAA;
-                font-size: 12px;
-                padding: 8px;
-                font-weight: bold;
-            }
-            
-            QMessageBox {
-                background-color: #252526;
-            }
-            
-            QPushButton {
-                background-color: #3A3A3A;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 5px;
-                padding: 5px 10px;
-            }
-            
-            QPushButton:hover {
-                background-color: #4E4E4E;
-            }
-            
-            QPushButton:pressed {
-                background-color: #383838;
-            }
-            
-            QScrollBar:vertical {
-                background: #1E1E1E;
-                width: 12px;
-                margin: 0px;
-                border-radius: 6px;
-            }
-            
-            QScrollBar::handle:vertical {
-                background: #3A3A3A;
-                min-height: 30px;
-                border-radius: 4px;
-            }
-            
-            QScrollBar::handle:vertical:hover {
-                background: #1E88E5;
-            }
-            
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
-    
-    def apply_light_theme(self):
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #F5F5F5;
-                color: #333333;
-            }
-            
-            #topPanel {
-                background-color: #FFFFFF;
-                border-bottom: 1px solid #E0E0E0;
-            }
-            
-            #controlCheckbox {
-                color: #333333;
-                spacing: 5px;
-                padding: 3px;
-            }
-            
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 3px;
-                border: 1px solid #BDBDBD;
-            }
-            
-            QCheckBox::indicator:unchecked {
-                background-color: #FFFFFF;
-            }
-            
-            QCheckBox::indicator:checked {
-                background-color: #1976D2;
-                border: 1px solid #1976D2;
-            }
-            
-            #addChannelButton {
-                background-color: #E0E0E0;
-                color: #333333;
-                border: none;
-                border-radius: 12px;
-                padding: 2px;
-            }
-            
-            #addChannelButton:hover {
-                background-color: #1E88E5;
-                color: #FFFFFF;
-            }
-            
-            #addChannelButton:pressed {
-                background-color: #1976D2;
-                color: #FFFFFF;
-            }
-            
-            #menuButton {
-                background-color: #E0E0E0;
-                color: #333333;
-                border: 1px solid #BDBDBD;
-                border-radius: 15px;
-                min-width: 150px;
-                min-height: 32px;
-                padding: 5px 15px;
-                font-weight: bold;
-                text-align: center;
-            }
-            
-            #menuButton:hover {
-                background-color: #EEEEEE;
-            }
-            
-            #menuButton:pressed {
-                background-color: #BDBDBD;
-            }
-            
-            #activeMenuButton {
-                background-color: #E0E0E0;
-                color: #333333;
-                border: 1px solid #BDBDBD;
-                border-radius: 15px;
-                min-width: 150px;
-                min-height: 32px;
-                padding: 5px 15px;
-                font-weight: bold;
-                text-align: center;
-            }
-            
-            #contentSplitter {
-                background-color: #F5F5F5;
-            }
-            
-            QSplitter::handle {
-                background-color: #E0E0E0;
-            }
-            
-            #leftPanel {
-                background-color: #FFFFFF;
-                border-right: 1px solid #E0E0E0;
-            }
-            
-            #centerArea {
-                background-color: #FFFFFF;
-                border-right: 1px solid #E0E0E0;
-            }
-            
-            #rightPanel {
-                background-color: #FFFFFF;
-            }
-            
-            #gifPlayer {
-                background-color: #F5F5F5;
-                border-radius: 10px;
-            }
-            
-            #customMenu {
-                background-color: transparent;
-                border: none;
-                padding: 8px;
-            }
-            
-            #customMenu::item {
-                background-color: transparent;
-                color: #333333;
-                padding: 8px 20px;
-                border-radius: 8px;
-                margin: 2px 5px;
-                font-weight: bold;
-            }
-            
-            #customMenu::item:selected {
-                background-color: #1E88E5;
-                color: #FFFFFF;
-            }
-            
-            #customMenu::item:checked {
-                background-color: #1976D2;
-                color: #FFFFFF;
-            }
-            
-            #collapseButton {
-                background-color: transparent;
-                border: none;
-            }
-            
-            #modelTitle {
-                color: #757575;
-                font-size: 12px;
-                padding: 5px;
-            }
-            
-            QMessageBox {
-                background-color: #FFFFFF;
-            }
-            
-            QPushButton {
-                background-color: #E0E0E0;
-                color: #333333;
-                border: none;
-                border-radius: 5px;
-                padding: 5px 10px;
-            }
-            
-            QPushButton:hover {
-                background-color: #EEEEEE;
-            }
-            
-            QPushButton:pressed {
-                background-color: #BDBDBD;
-            }
-            
-            QScrollBar:vertical {
-                background: #F5F5F5;
-                width: 12px;
-                margin: 0px;
-                border-radius: 6px;
-            }
-            
-            QScrollBar::handle:vertical {
-                background: #BDBDBD;
-                min-height: 30px;
-                border-radius: 4px;
-            }
-            
-            QScrollBar::handle:vertical:hover {
-                background: #1976D2;
-            }
-            
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
-    
     def show_admin_menu(self):
-        admin_menu = CustomMenu(self, is_dark=self.is_dark_theme)
+        admin_menu = CustomMenu(self, is_dark=self.tema_yoneticisi.aktif_tema == "koyu")
         admin_menu.setObjectName("customMenu")
         admin_menu.setMinimumWidth(200)
         
@@ -841,11 +646,11 @@ class MainWindow(QMainWindow):
         
         koyu_tema = QAction("Koyu Tema", tema_menu)
         koyu_tema.setCheckable(True)
-        koyu_tema.setChecked(self.is_dark_theme)
+        koyu_tema.setChecked(self.tema_yoneticisi.aktif_tema == "koyu")
         
         acik_tema = QAction("Açık Tema", tema_menu)
         acik_tema.setCheckable(True)
-        acik_tema.setChecked(not self.is_dark_theme)
+        acik_tema.setChecked(self.tema_yoneticisi.aktif_tema == "acik")
         
         tema_menu.addAction(koyu_tema)
         tema_menu.addAction(acik_tema)
@@ -859,33 +664,11 @@ class MainWindow(QMainWindow):
         elif action == ayarlar:
             self.show_settings()
         elif action == koyu_tema:
-            self.is_dark_theme = True
-            self.current_theme = "dark"
-            self.theme = self.settings['ui']['theme']['dark']
-            self.apply_dark_theme()
-            self.chat_panel.update_theme(self.theme)
+            self.tema_yoneticisi.tema_degistir("koyu")
+            self.tema_uygula()
         elif action == acik_tema:
-            self.is_dark_theme = False
-            self.current_theme = "light"
-            self.theme = self.settings['ui']['theme']['light']
-            self.apply_light_theme()
-            self.chat_panel.update_theme(self.theme)
-    
-    def toggle_channels_panel(self, state):
-        self.left_panel.setVisible(state)
-        if state:
-            sizes = self.content_splitter.sizes()
-            if sizes[0] < 100:
-                sizes[0] = 180
-                sizes[1] -= 90
-                sizes[2] -= 90
-                self.content_splitter.setSizes(sizes)
-        else:
-            sizes = self.content_splitter.sizes()
-            sizes[1] += sizes[0] // 2
-            sizes[2] += sizes[0] // 2
-            sizes[0] = 0
-            self.content_splitter.setSizes(sizes)
+            self.tema_yoneticisi.tema_degistir("acik")
+            self.tema_uygula()
     
     def show_settings(self):
         QMessageBox.information(self, "Ayarlar", "Ayarlar sayfası henüz mevcut değil.")
@@ -899,15 +682,11 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             QApplication.quit()
     
-    def initialize_conversation(self):
-        session = get_db_session()
-        conversations = session.query(Conversation).filter(Conversation.user_id == self.user.user_id).all()
-        session.close()
-        
-        if conversations:
-            self.conversation_panel.select_conversation(conversations[0])
-        else:
-            self.create_new_conversation()
+    def create_new_conversation(self):
+        conversation_name = f"Yeni Sohbet {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        new_conversation = self.conversation_panel.create_new_conversation(conversation_name)
+        if new_conversation:
+            self.conversation_panel.select_conversation(new_conversation)
     
     def load_conversation(self, conversation):
         if conversation is None:
@@ -964,6 +743,45 @@ class MainWindow(QMainWindow):
             session.close()
         
         chatgpt_manager.get_response(message.message_content, handle_response)
+    
+    def handle_voice_recording(self, file_path):
+        if not file_path or not os.path.exists(file_path):
+            return
+            
+        self.chat_panel.add_user_message("[Sesli Mesaj]")
+        
+        if not self.current_conversation:
+            conversation_name = f"Yeni Sohbet {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            self.current_conversation = self.conversation_panel.create_new_conversation(conversation_name)
+            if not self.current_conversation:
+                return
+        
+        session = get_db_session()
+        new_message = Message(
+            message_id=Message.generate_message_id(),
+            conversation_id=self.current_conversation.conversation_id,
+            message_content="[Sesli Mesaj]"
+        )
+        
+        session.add(new_message)
+        session.commit()
+        
+        QMessageBox.information(self, "Ses Kaydı", "Ses kaydı alındı. (Bu özellik henüz tam olarak çalışmıyor)")
+        
+        response = "Sesli mesaj özelliği şu anda geliştirme aşamasındadır. Yakında sesli mesajlar da anlaşılacak."
+        self.chat_panel.add_ai_message(response)
+        
+        db_message = session.query(Message).filter_by(message_id=new_message.message_id).first()
+        if db_message:
+            db_message.response_message = response
+            session.commit()
+        
+        session.close()
+        
+        try:
+            os.remove(file_path)
+        except:
+            pass
     
     def closeEvent(self, event):
         reply = QMessageBox.question(

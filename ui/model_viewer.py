@@ -384,7 +384,7 @@ class ModelViewer(QWidget):
                 text-transform: uppercase;
             }
         """)
-    
+        
     def start_animation(self):
         title_anim = QPropertyAnimation(self.title_frame, b"geometry")
         title_anim.setDuration(1000)

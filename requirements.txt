@@ -1,5 +1,10 @@
 PyQt6
-SQLAlchemy
+PyQt6-Qt6
+PyQt6-sip
+requests
+datetime
+pillow
+sqlalchemy
 openai
 PyJWT
 python-dotenv

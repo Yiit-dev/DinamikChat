@@ -63,7 +63,7 @@ python main.py
 - İlk kullanımda veritabanı otomatik olarak oluşturulur
 - Varsayılan admin kullanıcısı:
   - Kullanıcı adı: `admin`
-  - Parola: `admin123`
+  - Parola: `123`
 
 ## Sistem Gereksinimleri
 
